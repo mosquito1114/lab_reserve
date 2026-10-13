@@ -1,0 +1,33 @@
+# ============================================================
+# Docker 环境
+#
+# 由 docker-compose.yml 指定：
+#   SPRING_PROFILES_ACTIVE: docker
+#   MYSQL_HOST: mysql          ← 容器网络里的服务名
+#   REDIS_HOST: redis
+#
+# 其余连接参数（账号 / 密码）通过 env_file: .env 注入。
+# ============================================================
+
+spring:
+  datasource:
+    hikari:
+      # 容器内存有限，池子比本地小一点
+      minimum-idle: 5
+      maximum-pool-size: 15
+  flyway:
+    # 容器里每次启动都校验一遍迁移脚本是否与代码一致
+    validate-on-migrate: true
+
+mybatis-plus:
+  configuration:
+    # 容器环境不打 SQL，避免日志把磁盘写满（需要时改成 StdOutImpl）
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+logging:
+  level:
+    root: info
+    com.labreserve: info
+    com.labreserve.mapper: info
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

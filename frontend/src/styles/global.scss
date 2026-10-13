@@ -1,0 +1,130 @@
+/**
+ * 全局样式
+ *
+ * 只放：基础重置、CSS 变量、少量通用类。
+ * 组件级样式一律写在各自的 <style scoped> 里。
+ */
+
+:root {
+  --lr-primary: #409eff;
+  --lr-success: #67c23a;
+  --lr-warning: #e6a23c;
+  --lr-danger: #f56c6c;
+  --lr-info: #909399;
+
+  --lr-text-primary: #303133;
+  --lr-text-regular: #606266;
+  --lr-text-secondary: #909399;
+
+  --lr-border: #dcdfe6;
+  --lr-bg-page: #f5f7fa;
+
+  --lr-radius: 6px;
+  --lr-radius-sm: 4px;
+
+  --lr-header-height: 56px;
+  --lr-sidebar-width: 220px;
+  --lr-sidebar-width-collapsed: 64px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  color: var(--lr-text-primary);
+  background-color: var(--lr-bg-page);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--lr-primary);
+  text-decoration: none;
+}
+
+/* ---------- 滚动条 ---------- */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgb(144 147 153 / 35%);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(144 147 153 / 55%);
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+}
+
+/* ---------- 通用布局辅助 ---------- */
+.page-container {
+  padding: 16px;
+}
+
+.page-card {
+  background: #fff;
+  border-radius: var(--lr-radius);
+  padding: 16px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.table-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.text-secondary {
+  color: var(--lr-text-secondary);
+}
+
+.text-danger {
+  color: var(--lr-danger);
+}
+
+.mt-8 {
+  margin-top: 8px;
+}
+
+.mt-16 {
+  margin-top: 16px;
+}
+
+.mb-16 {
+  margin-bottom: 16px;
+}
+
+/* ---------- Element Plus 微调 ---------- */
+.el-table th.el-table__cell {
+  background-color: #fafafa !important;
+  font-weight: 600;
+}
+
+.el-card {
+  border-radius: var(--lr-radius);
+}

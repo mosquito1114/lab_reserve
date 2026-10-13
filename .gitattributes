@@ -1,0 +1,29 @@
+# 默认：文本文件统一 LF，避免 macOS / Windows 协作时产生全文件 diff
+* text=auto eol=lf
+
+# Shell 与 Maven Wrapper 必须 LF
+*.sh      text eol=lf
+mvnw      text eol=lf
+
+# Windows 脚本必须 CRLF
+*.cmd     text eol=crlf
+*.bat     text eol=crlf
+
+# 二进制文件不做行尾转换
+*.png     binary
+*.jpg     binary
+*.jpeg    binary
+*.gif     binary
+*.ico     binary
+*.webp    binary
+*.woff    binary
+*.woff2   binary
+*.ttf     binary
+*.eot     binary
+*.pdf     binary
+*.xlsx    binary
+*.jar     binary
+
+# 让 GitHub / GitLab 正确统计语言
+*.sql     text
+*.md      text

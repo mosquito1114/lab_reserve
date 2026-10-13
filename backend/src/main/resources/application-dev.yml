@@ -1,0 +1,30 @@
+# ============================================================
+# 开发环境（默认 profile）
+#
+# 用本地或 Docker 里的中间件：
+#   docker compose up -d mysql redis
+# 然后直接 ./mvnw spring-boot:run
+#
+# 连接参数来自 .env（MYSQL_HOST 默认 localhost）。
+# ============================================================
+
+spring:
+  # 开发期把 SQL 打到控制台，方便排查判冲与排队相关的 SQL
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+
+mybatis-plus:
+  configuration:
+    # 控制台输出执行的 SQL 与参数
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+logging:
+  level:
+    root: info
+    com.labreserve: debug
+    # 打印 Mapper 层 SQL
+    com.labreserve.mapper: debug
+    org.springframework.jdbc.core: debug
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

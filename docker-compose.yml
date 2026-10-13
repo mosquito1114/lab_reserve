@@ -1,0 +1,142 @@
+name: lab-reserve
+
+# ============================================================
+# lab_reserve 一键启动编排
+#
+#   cp .env.example .env   # 先填好凭据
+#   docker compose up -d --build
+#
+# 服务：
+#   mysql    3306   数据持久化在 named volume
+#   redis    6379   AOF 持久化（Redis Stream 邮件队列不能丢）
+#   backend  8080   Spring Boot
+#   frontend 80     nginx 托管前端静态资源 + 反代 /api
+# ============================================================
+
+services:
+  # ------------------------------------------------------------
+  # MySQL 8
+  # ------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: lab-reserve-mysql
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      # 建库 + 建账号（容器首次初始化时执行，先于 Flyway）
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks:
+      - lab-net
+
+  # ------------------------------------------------------------
+  # Redis 7（appendonly yes，容纳 Stream 邮件队列）
+  # ------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: lab-reserve-redis
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+      - ./docker/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    # 密码通过 --requirepass 注入容器环境变量，避免凭据写进 redis.conf（那份要提交 Git）
+    command: ["sh", "-c", "exec redis-server /usr/local/etc/redis/redis.conf --requirepass \"$$REDIS_PASSWORD\""]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - lab-net
+
+  # ------------------------------------------------------------
+  # 后端 Spring Boot 3
+  # ------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: lab-reserve-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      SPRING_PROFILES_ACTIVE: docker
+      # 容器网络内主机名覆盖
+      MYSQL_HOST: mysql
+      REDIS_HOST: redis
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # 注意：本项目接口统一 POST，健康检查也必须用 POST
+      test: ["CMD-SHELL", "curl -fsS -X POST http://127.0.0.1:8080/api/system/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    networks:
+      - lab-net
+
+  # ------------------------------------------------------------
+  # 前端 Vue3 + nginx
+  # ------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: lab-reserve-frontend
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/ >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    networks:
+      - lab-net
+
+volumes:
+  mysql-data:
+    name: lab-reserve-mysql-data
+  redis-data:
+    name: lab-reserve-redis-data
+
+networks:
+  lab-net:
+    name: lab-reserve-net
