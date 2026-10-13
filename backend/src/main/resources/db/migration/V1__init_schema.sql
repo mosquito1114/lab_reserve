@@ -12,6 +12,9 @@
 --      因此 Java 侧不需要 MetaObjectHandler。
 --   4. 业务主体表（tb_user / tb_laboratory / tb_equipment / tb_reservation）
 --      不物理删除，用 status 表达"注销 / 停用 / 已取消"。
+--   5. 反冗余原则：能通过 join 查到的字段一律不落库（详见 agents/design.md §1.6）。
+--      因此本脚本里没有"姓名快照 / 编号快照 / 角色快照"这类字段，
+--      查询时 join 对应的主表即可。
 -- ============================================================================
 
 SET NAMES utf8mb4;
@@ -224,8 +227,6 @@ CREATE TABLE tb_reservation (
   id                 BIGINT       NOT NULL AUTO_INCREMENT,
   reserve_no         VARCHAR(30)  NOT NULL COMMENT '预约号 R-YYYYMMDD-XXXX',
   applicant_id       BIGINT       NOT NULL COMMENT '申请人 tb_user.id',
-  applicant_name     VARCHAR(50)  NOT NULL COMMENT '申请人姓名快照',
-  applicant_college  VARCHAR(50)           DEFAULT NULL COMMENT '申请人学院快照（供统计）',
   resource_type      TINYINT      NOT NULL COMMENT '1实验室 2设备',
   lab_id             BIGINT                DEFAULT NULL COMMENT '实验室ID（type=1 必填）',
   equipment_id       BIGINT                DEFAULT NULL COMMENT '设备ID（type=2 必填，主资源）',
@@ -436,14 +437,12 @@ CREATE TABLE tb_repair_record (
 
 -- ============================================================================
 -- 八、审计域
---    只增不改不删；operator_name / role_code 冗余存快照，防止用户注销后日志断链
+--    只增不改不删；操作人姓名与角色通过 operator_id join tb_user / tb_role 得到
 -- ============================================================================
 
 CREATE TABLE tb_operation_log (
   id             BIGINT       NOT NULL AUTO_INCREMENT,
   operator_id    BIGINT                DEFAULT NULL COMMENT '操作人ID（登录失败时为空）',
-  operator_name  VARCHAR(50)           DEFAULT NULL COMMENT '操作人姓名快照',
-  role_code      VARCHAR(30)           DEFAULT NULL COMMENT '角色编码快照',
   module         VARCHAR(30)  NOT NULL COMMENT '模块 auth/user/resource/reservation/queue/repair/message/statistics/system',
   operation_type VARCHAR(30)  NOT NULL COMMENT 'LOGIN/LOGOUT/CREATE/UPDATE/DELETE/AUDIT/EXPORT/ASSIGN/ACCEPT/QUERY_PHONE',
   content        VARCHAR(500) NOT NULL COMMENT '操作内容描述',

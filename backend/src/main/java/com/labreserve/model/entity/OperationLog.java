@@ -28,12 +28,6 @@ public class OperationLog implements Serializable {
     /** 操作人 ID（登录失败时为空） */
     private Long operatorId;
 
-    /** 操作人姓名快照（防悬空） */
-    private String operatorName;
-
-    /** 角色编码快照 */
-    private String roleCode;
-
     /** 模块编码，见 {@code OperationModule#getCode()} */
     private String module;
 

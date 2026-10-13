@@ -5,7 +5,6 @@ import com.labreserve.util.IpUtils;
 import com.labreserve.util.JsonUtils;
 import com.labreserve.model.entity.OperationLog;
 import com.labreserve.util.SensitiveUtils;
-import com.labreserve.model.vo.LoginUser;
 import com.labreserve.util.SecurityUtils;
 import com.labreserve.service.OperationLogService;
 import jakarta.servlet.ServletRequest;
@@ -79,13 +78,8 @@ public class OpLogAspect {
     private OperationLog build(ProceedingJoinPoint joinPoint, OpLog opLog, long costMs, Throwable error) {
         OperationLog entity = new OperationLog();
 
-        // 操作人（未登录时全部为 null，例如登录失败场景）
-        LoginUser user = SecurityUtils.getLoginUser();
-        if (user != null) {
-            entity.setOperatorId(user.getUserId());
-            entity.setOperatorName(user.getRealName());
-            entity.setRoleCode(user.getRoleCode());
-        }
+        // 只存 operator_id；操作人姓名与角色在查询时 join tb_user / tb_role 得到（反冗余原则）
+        entity.setOperatorId(SecurityUtils.getUserId());
 
         entity.setModule(opLog.module().getCode());
         entity.setOperationType(opLog.type().name());

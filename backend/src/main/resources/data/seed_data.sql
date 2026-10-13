@@ -317,7 +317,7 @@ FROM labs CROSS JOIN kinds;
 -- ============================================================================
 
 INSERT INTO tb_reservation (
-    reserve_no, applicant_id, applicant_name, applicant_college,
+    reserve_no, applicant_id,
     resource_type, lab_id, equipment_id, equipment_count,
     reserve_date, slot_id, use_people,
     experiment_type_id, course_name, purpose, status,
@@ -328,8 +328,6 @@ SELECT
   CONCAT('R-', DATE_FORMAT(DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY), '%Y%m%d'),
          '-', LPAD(x.n + 1, 4, '0')),
   t.user_id,
-  u.real_name,
-  t.college,
   1,
   (x.n MOD 12) + 1,
   NULL,
@@ -362,8 +360,7 @@ JOIN tb_laboratory l ON l.id = (x.n MOD 12) + 1
 JOIN tb_class c ON c.id = ((l.id - 1) MOD 10) + 1
 -- 实验室只能由教师预约，按班级所属学院取该学院的教师（同一学院只取一个，避免行数翻倍）
 JOIN (SELECT college, MIN(user_id) AS user_id FROM tb_teacher_info GROUP BY college) t
-  ON t.college = c.college
-JOIN tb_user u ON u.id = t.user_id;
+  ON t.college = c.college;
 
 
 -- 实验室预约必须指定上课班级（教师选班级），这里按 lab_id 反查，与学生课表口径一致
@@ -373,7 +370,7 @@ FROM tb_reservation r
 WHERE r.resource_type = 1;
 -- 设备预约（120 条）：占用键为空，不受实验室唯一索引约束
 INSERT INTO tb_reservation (
-    reserve_no, applicant_id, applicant_name, applicant_college,
+    reserve_no, applicant_id,
     resource_type, lab_id, equipment_id, equipment_count,
     reserve_date, slot_id, use_people,
     experiment_type_id, course_name, purpose, status,
@@ -384,8 +381,6 @@ SELECT
   CONCAT('R-D', DATE_FORMAT(DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY), '%Y%m%d'),
          '-', LPAD(y.n + 1, 4, '0')),
   u.id,
-  u.real_name,
-  COALESCE(c.college, t.college),
   2,
   NULL,
   (y.n MOD 84) + 1,
@@ -409,10 +404,7 @@ SELECT
   DATE_ADD(DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY), INTERVAL -(2 + (y.n MOD 3)) DAY),
   DATE_ADD(DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY), INTERVAL -(2 + (y.n MOD 3)) DAY)
 FROM y
-JOIN tb_user u ON u.id = 5 + (y.n MOD 12)
-LEFT JOIN tb_student_info si ON si.user_id = u.id
-LEFT JOIN tb_class c ON c.id = si.class_id
-LEFT JOIN tb_teacher_info t ON t.user_id = u.id;
+JOIN tb_user u ON u.id = 5 + (y.n MOD 12);
 
 -- ============================================================================
 -- 10. 历史消息（给每个学生/教师制造一些站内信，用于未读角标演示）
