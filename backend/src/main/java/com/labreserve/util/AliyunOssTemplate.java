@@ -7,8 +7,8 @@ import com.aliyun.oss.model.PutObjectRequest;
 import com.labreserve.common.exception.BizException;
 import com.labreserve.config.OssProperties;
 import jakarta.annotation.PreDestroy;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -30,10 +30,10 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class AliyunOssTemplate {
 
-    private final OssProperties properties;
+    @Autowired
+    private OssProperties properties;
 
     private static final DateTimeFormatter YEAR = DateTimeFormatter.ofPattern("yyyy");
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("MM");

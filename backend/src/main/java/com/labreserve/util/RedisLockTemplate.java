@@ -1,7 +1,7 @@
 package com.labreserve.util;
 
 import com.labreserve.common.exception.BizException;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
@@ -42,10 +42,10 @@ import java.util.function.Supplier;
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class RedisLockTemplate {
 
-    private final RedissonClient redissonClient;
+    @Autowired
+    private RedissonClient redissonClient;
 
     /** 默认最长等待时间（秒） */
     public static final long DEFAULT_WAIT_SECONDS = 3L;

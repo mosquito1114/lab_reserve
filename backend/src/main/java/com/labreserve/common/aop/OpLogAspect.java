@@ -10,7 +10,7 @@ import com.labreserve.service.OperationLogService;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -40,10 +40,18 @@ import java.util.Arrays;
 @Slf4j
 @Aspect
 @Component
-@RequiredArgsConstructor
 public class OpLogAspect {
 
-    private final OperationLogService operationLogService;
+    @Autowired
+    private OperationLogService operationLogService;
+    @Autowired
+    private SecurityUtils securityUtils;
+    @Autowired
+    private IpUtils ipUtils;
+    @Autowired
+    private JsonUtils jsonUtils;
+    @Autowired
+    private SensitiveUtils sensitiveUtils;
 
     /** 请求参数最大长度（列类型为 TEXT，这里主动截断避免日志过大） */
     private static final int PARAM_MAX_LEN = 2000;
@@ -79,7 +87,7 @@ public class OpLogAspect {
         OperationLog entity = new OperationLog();
 
         // 只存 operator_id；操作人姓名与角色在查询时 join tb_user / tb_role 得到（反冗余原则）
-        entity.setOperatorId(SecurityUtils.getUserId());
+        entity.setOperatorId(securityUtils.getUserId());
 
         entity.setModule(opLog.module().getCode());
         entity.setOperationType(opLog.type().name());
@@ -89,8 +97,8 @@ public class OpLogAspect {
         if (request != null) {
             entity.setRequestMethod(request.getMethod());
             entity.setRequestUrl(truncate(request.getRequestURI(), URL_MAX_LEN));
-            entity.setIp(IpUtils.getClientIp(request));
-            entity.setUserAgent(IpUtils.truncateUserAgent(request.getHeader("User-Agent")));
+            entity.setIp(ipUtils.getClientIp(request));
+            entity.setUserAgent(ipUtils.truncateUserAgent(request.getHeader("User-Agent")));
         }
 
         if (opLog.saveParam()) {
@@ -124,11 +132,11 @@ public class OpLogAspect {
         if (serializable.length == 0) {
             return null;
         }
-        String json = JsonUtils.toJson(serializable);
+        String json = jsonUtils.toJson(serializable);
         if (json == null) {
             return null;
         }
-        return truncate(SensitiveUtils.maskInText(json), PARAM_MAX_LEN);
+        return truncate(sensitiveUtils.maskInText(json), PARAM_MAX_LEN);
     }
 
     private static HttpServletRequest currentRequest() {
