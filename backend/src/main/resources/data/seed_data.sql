@@ -319,7 +319,7 @@ FROM labs CROSS JOIN kinds;
 INSERT INTO tb_reservation (
     reserve_no, applicant_id, applicant_name, applicant_college,
     resource_type, lab_id, equipment_id, equipment_count,
-    reserve_date, slot_id, start_time, end_time, use_people,
+    reserve_date, slot_id, use_people,
     experiment_type_id, course_name, purpose, status,
     audit_user_id, audit_time, reject_reason, from_queue, source_queue_id,
     created_at, updated_at)
@@ -336,8 +336,6 @@ SELECT
   1,
   DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY),
   ((x.n DIV 12) MOD 5) + 1,
-  ELT(((x.n DIV 12) MOD 5) + 1, '08:00:00', '10:00:00', '14:00:00', '16:00:00', '19:00:00'),
-  ELT(((x.n DIV 12) MOD 5) + 1, '09:40:00', '11:40:00', '15:40:00', '17:40:00', '20:40:00'),
   -- 使用人数 = 上课班级人数，且不超过实验室容量
   LEAST(c.student_count, l.capacity),
   -- 实验类型必须与所选实验室的可开展类型一致，所以由 lab_id 反查 ELT
@@ -377,7 +375,7 @@ WHERE r.resource_type = 1;
 INSERT INTO tb_reservation (
     reserve_no, applicant_id, applicant_name, applicant_college,
     resource_type, lab_id, equipment_id, equipment_count,
-    reserve_date, slot_id, start_time, end_time, use_people,
+    reserve_date, slot_id, use_people,
     experiment_type_id, course_name, purpose, status,
     audit_user_id, audit_time, reject_reason, from_queue, source_queue_id,
     created_at, updated_at)
@@ -394,8 +392,6 @@ SELECT
   1 + (y.n MOD 3),
   DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY),
   ((y.n DIV 8) MOD 5) + 1,
-  ELT(((y.n DIV 8) MOD 5) + 1, '08:00:00', '10:00:00', '14:00:00', '16:00:00', '19:00:00'),
-  ELT(((y.n DIV 8) MOD 5) + 1, '09:40:00', '11:40:00', '15:40:00', '17:40:00', '20:40:00'),
   1 + (y.n MOD 20),
   (y.n MOD 5) + 1,
   IF(u.role_id = 2, CONCAT('课程-', ELT((y.n MOD 5) + 1, '程序设计', '电路分析', '机械设计', '化工原理', '人工智能')), NULL),
@@ -449,18 +445,18 @@ WHERE r.id <= 120;
 -- 11. 演示排队与候补（让"我的排队"页面一进来看得到东西）
 -- ============================================================================
 
-INSERT INTO tb_resource_queue (queue_no, resource_type, lab_id, equipment_id, resource_no,
+INSERT INTO tb_resource_queue (queue_no, resource_type, lab_id, equipment_id,
                                reserve_date, slot_id, applicant_id, status, join_time, created_at, updated_at)
 VALUES
-('P-LAB-01-20251010-001', 1, 1,  NULL, 'LAB-01', '2025-10-10', 2, 5,  'QUEUING',  '2025-10-08 09:10:00', '2025-10-08 09:10:00', '2025-10-08 09:10:00'),
-('P-LAB-01-20251010-002', 1, 1,  NULL, 'LAB-01', '2025-10-10', 2, 6,  'QUEUING',  '2025-10-08 09:25:00', '2025-10-08 09:25:00', '2025-10-08 09:25:00'),
-('P-LAB-01-20251010-003', 1, 1,  NULL, 'LAB-01', '2025-10-10', 2, 7,  'QUEUING',  '2025-10-08 10:02:00', '2025-10-08 10:02:00', '2025-10-08 10:02:00'),
-('P-LAB-03-20251011-001', 1, 3,  NULL, 'LAB-03', '2025-10-11', 3, 9,  'NOTIFIED', '2025-10-08 14:00:00', '2025-10-08 14:00:00', '2025-10-09 09:00:00'),
-('P-LAB-05-20251012-001', 1, 5,  NULL, 'LAB-05', '2025-10-12', 1, 10, 'QUEUING',  '2025-10-09 08:30:00', '2025-10-09 08:30:00', '2025-10-09 08:30:00'),
-('P-ZY-01-001-20251012-001', 2, NULL, 1, 'ZY-01-001', '2025-10-12', 4, 11, 'QUEUING', '2025-10-09 11:00:00', '2025-10-09 11:00:00', '2025-10-09 11:00:00');
+('P-LAB-01-20251010-001', 1, 1,  NULL, '2025-10-10', 2, 5,  'QUEUING',  '2025-10-08 09:10:00', '2025-10-08 09:10:00', '2025-10-08 09:10:00'),
+('P-LAB-01-20251010-002', 1, 1,  NULL, '2025-10-10', 2, 6,  'QUEUING',  '2025-10-08 09:25:00', '2025-10-08 09:25:00', '2025-10-08 09:25:00'),
+('P-LAB-01-20251010-003', 1, 1,  NULL, '2025-10-10', 2, 7,  'QUEUING',  '2025-10-08 10:02:00', '2025-10-08 10:02:00', '2025-10-08 10:02:00'),
+('P-LAB-03-20251011-001', 1, 3,  NULL, '2025-10-11', 3, 9,  'NOTIFIED', '2025-10-08 14:00:00', '2025-10-08 14:00:00', '2025-10-09 09:00:00'),
+('P-LAB-05-20251012-001', 1, 5,  NULL, '2025-10-12', 1, 10, 'QUEUING',  '2025-10-09 08:30:00', '2025-10-09 08:30:00', '2025-10-09 08:30:00'),
+('P-ZY-01-001-20251012-001', 2, NULL, 1, '2025-10-12', 4, 11, 'QUEUING', '2025-10-09 11:00:00', '2025-10-09 11:00:00', '2025-10-09 11:00:00');
 
-INSERT INTO tb_candidate_notice_log (queue_id, applicant_id, notice_time, deadline, channel, action, action_time, seq, created_at)
-SELECT q.id, q.applicant_id, '2025-10-09 09:00:00', '2025-10-09 09:30:00', 1, 0, NULL, 1, '2025-10-09 09:00:00'
+INSERT INTO tb_candidate_notice_log (queue_id, notice_time, deadline, channel, action, action_time, seq, created_at)
+SELECT q.id, '2025-10-09 09:00:00', '2025-10-09 09:30:00', 1, 0, NULL, 1, '2025-10-09 09:00:00'
 FROM tb_resource_queue q
 WHERE q.queue_no = 'P-LAB-03-20251011-001';
 
@@ -468,65 +464,65 @@ WHERE q.queue_no = 'P-LAB-03-20251011-001';
 -- 12. 演示报修工单
 -- ============================================================================
 
-INSERT INTO tb_repair_order (order_no, submitter_id, submitter_name, equipment_id, equipment_no,
+INSERT INTO tb_repair_order (order_no, submitter_id, equipment_id,
                              fault_desc, fault_scene, fault_images, priority, status,
                              reviewer_id, review_time, review_opinion,
                              assignee_id, assign_time,
                              accept_user_id, accept_time, accept_result, accept_opinion, archive_time,
                              created_at, updated_at)
 VALUES
-('WX-20250920-0001', 5, '张一鸣', 1, 'ZY-01-001',
+('WX-20250920-0001', 5, 1,
  '开机后屏幕无显示，主机风扇不转', '2025-09-20 上午第三节课，做操作系统实验时',
  NULL, 3, 'ACCEPTED', 2, '2025-09-20 14:00:00', '确认设备故障，已转维修',
  3, '2025-09-20 15:00:00', 2, '2025-09-22 10:00:00', 1, '更换电源后测试正常', '2025-09-22 10:05:00',
  '2025-09-20 11:30:00', '2025-09-22 10:05:00'),
-('WX-20250925-0002', 6, '陈思远', 9, 'ZY-02-002',
+('WX-20250925-0002', 6, 9,
  '示波器屏幕闪烁，波形不稳定', '2025-09-25 下午第一节课',
  NULL, 2, 'REPAIRING', 2, '2025-09-25 16:00:00', '初步判断为探头接触不良',
  3, '2025-09-25 17:00:00', NULL, NULL, NULL, NULL, NULL,
  '2025-09-25 15:20:00', '2025-09-26 09:00:00'),
-('WX-20250928-0003', 7, '刘雨桐', 17, 'ZY-03-003',
+('WX-20250928-0003', 7, 17,
  '万用表读数跳变，无法归零', '2025-09-28 下午实验课',
  NULL, 1, 'ASSIGNED', 2, '2025-09-28 15:00:00', '确认设备故障',
  4, '2025-09-28 16:00:00', NULL, NULL, NULL, NULL, NULL,
  '2025-09-28 14:10:00', '2025-09-28 16:00:00'),
-('WX-20251001-0004', 8, '黄浩然', 25, 'ZY-04-004',
+('WX-20251001-0004', 8, 25,
  '信号发生器输出无波形', '2025-10-01 上午实验',
  NULL, 4, 'SUBMITTED', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
  '2025-10-01 10:30:00', '2025-10-01 10:30:00'),
-('WX-20251002-0005', 9, '周欣怡', 33, 'ZY-05-005',
+('WX-20251002-0005', 9, 33,
  '电源输出不稳定，电压漂移', '2025-10-02 下午实验',
  NULL, 2, 'SUBMITTED', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
  '2025-10-02 15:00:00', '2025-10-02 15:00:00');
 
-INSERT INTO tb_repair_record (order_id, maintainer_id, maintainer_name, status, repair_desc, parts_replaced, created_at)
-SELECT o.id, 3, '王建国', 1, '已到达现场，正在排查电源模块', NULL, '2025-09-25 17:30:00'
+INSERT INTO tb_repair_record (order_id, maintainer_id, status, repair_desc, parts_replaced, created_at)
+SELECT o.id, 3, 1, '已到达现场，正在排查电源模块', NULL, '2025-09-25 17:30:00'
 FROM tb_repair_order o WHERE o.order_no = 'WX-20250925-0002';
 
-INSERT INTO tb_repair_record (order_id, maintainer_id, maintainer_name, status, repair_desc, parts_replaced, created_at)
-SELECT o.id, 3, '王建国', 1, '定位为电源模块损坏，等待配件', NULL, '2025-09-20 15:30:00'
+INSERT INTO tb_repair_record (order_id, maintainer_id, status, repair_desc, parts_replaced, created_at)
+SELECT o.id, 3, 1, '定位为电源模块损坏，等待配件', NULL, '2025-09-20 15:30:00'
 FROM tb_repair_order o WHERE o.order_no = 'WX-20250920-0001';
 
-INSERT INTO tb_repair_record (order_id, maintainer_id, maintainer_name, status, repair_desc, parts_replaced, created_at)
-SELECT o.id, 3, '王建国', 2, '更换电源模块 1 个，通电测试正常', '电源模块 ATX-500W × 1', '2025-09-22 09:40:00'
+INSERT INTO tb_repair_record (order_id, maintainer_id, status, repair_desc, parts_replaced, created_at)
+SELECT o.id, 3, 2, '更换电源模块 1 个，通电测试正常', '电源模块 ATX-500W × 1', '2025-09-22 09:40:00'
 FROM tb_repair_order o WHERE o.order_no = 'WX-20250920-0001';
 
 -- ============================================================================
 -- 13. 资源更新日志样例
 -- ============================================================================
 
-INSERT INTO tb_resource_update_log (resource_type, resource_id, resource_name, operation,
-                                    before_json, after_json, update_reason, operator_id, operator_name, created_at)
+INSERT INTO tb_resource_update_log (resource_type, resource_id, operation,
+                                    before_json, after_json, update_reason, operator_id, created_at)
 VALUES
-(1, 1, '计算机基础实验室', 2,
+(1, 1, 2,
  '{"capacity":50,"location":"实验楼 A301"}',
  '{"capacity":60,"location":"实验楼 A301"}',
- '扩容：新增 10 个机位', 2, '李文博', '2025-09-05 10:00:00'),
-(2, 1, '微型计算机', 2,
+ '扩容：新增 10 个机位', 2, '2025-09-05 10:00:00'),
+(2, 1, 2,
  '{"stock":8,"status":1}',
  '{"stock":10,"status":1}',
- '新采购 2 台', 2, '李文博', '2025-09-06 11:20:00'),
-(1, 12, '创新创业实验室', 1,
+ '新采购 2 台', 2, '2025-09-06 11:20:00'),
+(1, 12, 1,
  NULL,
  '{"labNo":"LAB-12","capacity":30}',
- '新增开放共享空间', 2, '李文博', '2025-09-01 09:00:00');
+ '新增开放共享空间', 2, '2025-09-01 09:00:00');
