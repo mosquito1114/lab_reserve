@@ -1,4 +1,7 @@
-package com.labreserve.infra.sensitive;
+package com.labreserve.util;
+
+import com.labreserve.common.annotation.Sensitive;
+import com.labreserve.common.enums.SensitiveType;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;

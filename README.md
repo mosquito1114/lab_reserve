@@ -119,15 +119,23 @@ lab_reserve/
 
 ```
 backend/src/main/java/com/labreserve/
-├─ common/      统一响应 R<T>、异常、常量、工具
-├─ config/      框架配置（MP / Redis / Jackson / Knife4j / 线程池）
-├─ security/    JWT + 精简 RBAC（@RequirePerm）
-├─ infra/       redis（分布式锁）/ oplog（AOP 日志）/ sensitive（脱敏）/ oss / stream
-├─ controller/  只做参数校验 + 调 service
-├─ service/     接口
-│   └─ impl/    实现（事务边界）
-├─ mapper/      MyBatis-Plus Mapper（不写 XML）
-├─ entity/ dto/ vo/ enums/
+├─ common/            通用基础设施（与业务无关）
+│   ├─ annotation/      自定义注解（@OpLog、@Sensitive）
+│   ├─ aop/             切面（操作日志）
+│   ├─ constant/        常量（CommonConst、RedisKeyConst）
+│   ├─ enums/           枚举（OperationModule、OperationType、SensitiveType）
+│   ├─ exception/       业务异常 + 全局异常处理器
+│   └─ result/          R<T>、PageResult、PageQuery、ResultCode
+├─ config/            Spring 配置（MP / Redis / Jackson / Knife4j / 线程池 / Security / DataSeeder）
+├─ util/              工具类（静态工具 + Spring 助手组件：分布式锁、OSS、脱敏）
+├─ model/             数据模型
+│   ├─ entity/          数据库实体（@TableName）
+│   ├─ dto/             入参
+│   └─ vo/              出参
+├─ controller/        只做参数校验 + 调 service
+├─ service/           接口
+│   └─ impl/          实现（事务边界）
+├─ mapper/            MyBatis-Plus Mapper（不写 XML）
 └─ resources/
     ├─ db/migration/         Flyway 建表脚本
     ├─ data/                 种子数据（启动时判空灌入）

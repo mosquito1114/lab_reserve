@@ -2,8 +2,8 @@ package com.labreserve.controller;
 
 import com.labreserve.common.constant.CommonConst;
 import com.labreserve.common.result.R;
-import com.labreserve.infra.redis.RedisUtils;
-import com.labreserve.vo.SystemHealthVO;
+import com.labreserve.util.RedisUtils;
+import com.labreserve.model.vo.SystemHealthVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;

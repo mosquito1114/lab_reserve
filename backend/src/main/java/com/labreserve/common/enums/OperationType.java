@@ -1,4 +1,4 @@
-package com.labreserve.enums;
+package com.labreserve.common.enums;
 
 import lombok.Getter;
 

@@ -1,6 +1,6 @@
 package com.labreserve.service;
 
-import com.labreserve.entity.OperationLog;
+import com.labreserve.model.entity.OperationLog;
 
 /**
  * 操作日志服务。

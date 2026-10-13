@@ -1,11 +1,12 @@
-package com.labreserve.infra.oplog;
+package com.labreserve.common.aop;
 
-import com.labreserve.common.util.IpUtils;
-import com.labreserve.common.util.JsonUtils;
-import com.labreserve.entity.OperationLog;
-import com.labreserve.infra.sensitive.SensitiveUtils;
-import com.labreserve.security.LoginUser;
-import com.labreserve.security.SecurityUtils;
+import com.labreserve.common.annotation.OpLog;
+import com.labreserve.util.IpUtils;
+import com.labreserve.util.JsonUtils;
+import com.labreserve.model.entity.OperationLog;
+import com.labreserve.util.SensitiveUtils;
+import com.labreserve.model.vo.LoginUser;
+import com.labreserve.util.SecurityUtils;
 import com.labreserve.service.OperationLogService;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;

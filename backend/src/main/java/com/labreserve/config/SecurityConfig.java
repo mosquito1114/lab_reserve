@@ -1,4 +1,4 @@
-package com.labreserve.security;
+package com.labreserve.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

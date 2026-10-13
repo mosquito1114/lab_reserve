@@ -1,4 +1,4 @@
-package com.labreserve.infra.redis;
+package com.labreserve.util;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisCallback;

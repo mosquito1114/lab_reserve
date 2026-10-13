@@ -1,7 +1,9 @@
-package com.labreserve.infra.sensitive;
+package com.labreserve.common.annotation;
 
 import com.fasterxml.jackson.annotation.JacksonAnnotationsInside;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.labreserve.common.enums.SensitiveType;
+import com.labreserve.util.SensitiveSerializer;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

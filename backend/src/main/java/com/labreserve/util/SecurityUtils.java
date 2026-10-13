@@ -1,4 +1,6 @@
-package com.labreserve.security;
+package com.labreserve.util;
+
+import com.labreserve.model.vo.LoginUser;
 
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;

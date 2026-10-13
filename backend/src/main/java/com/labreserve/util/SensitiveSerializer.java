@@ -1,4 +1,4 @@
-package com.labreserve.infra.sensitive;
+package com.labreserve.util;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.BeanProperty;
@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.ContextualSerializer;
+import com.labreserve.common.annotation.Sensitive;
+import com.labreserve.common.enums.SensitiveType;
 
 import java.io.IOException;
 

@@ -1,4 +1,4 @@
-package com.labreserve.vo;
+package com.labreserve.model.vo;
 
 import lombok.Data;
 

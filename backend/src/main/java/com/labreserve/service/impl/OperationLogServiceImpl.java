@@ -1,7 +1,7 @@
 package com.labreserve.service.impl;
 
 import com.labreserve.config.AsyncConfig;
-import com.labreserve.entity.OperationLog;
+import com.labreserve.model.entity.OperationLog;
 import com.labreserve.mapper.OperationLogMapper;
 import com.labreserve.service.OperationLogService;
 import lombok.RequiredArgsConstructor;

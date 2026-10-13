@@ -1,4 +1,4 @@
-package com.labreserve.infra.sensitive;
+package com.labreserve.common.enums;
 
 import lombok.Getter;
 

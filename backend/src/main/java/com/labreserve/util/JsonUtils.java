@@ -1,4 +1,4 @@
-package com.labreserve.common.util;
+package com.labreserve.util;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.type.TypeReference;

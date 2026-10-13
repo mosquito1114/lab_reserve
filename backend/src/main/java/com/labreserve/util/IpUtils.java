@@ -1,4 +1,4 @@
-package com.labreserve.common.util;
+package com.labreserve.util;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.util.StringUtils;

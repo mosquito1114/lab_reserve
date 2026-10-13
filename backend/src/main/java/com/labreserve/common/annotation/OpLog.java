@@ -1,7 +1,7 @@
-package com.labreserve.infra.oplog;
+package com.labreserve.common.annotation;
 
-import com.labreserve.enums.OperationModule;
-import com.labreserve.enums.OperationType;
+import com.labreserve.common.enums.OperationModule;
+import com.labreserve.common.enums.OperationType;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;

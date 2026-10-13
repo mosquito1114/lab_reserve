@@ -1,7 +1,7 @@
 package com.labreserve.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.labreserve.entity.OperationLog;
+import com.labreserve.model.entity.OperationLog;
 import org.apache.ibatis.annotations.Mapper;
 
 /**

@@ -1,4 +1,4 @@
-package com.labreserve.security;
+package com.labreserve.model.vo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

@@ -1,4 +1,4 @@
-package com.labreserve.infra.redis;
+package com.labreserve.util;
 
 import com.labreserve.common.exception.BizException;
 import lombok.RequiredArgsConstructor;
