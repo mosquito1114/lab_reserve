@@ -146,10 +146,23 @@ backend/src/main/java/com/labreserve/
 
 ## 五、分支与提交规范
 
-| 分支 | 用途 |
-|---|---|
-| `master` | **只放可部署版本**，仅在迭代验收通过后从 `dev` 合并 |
-| `dev` | 日常开发 |
+| 分支 | 用途 | 规则 |
+|---|---|---|
+| `master` | 可部署版本 | **⚠️ 绝对不直接提交**。只接受 `dev` 的 `--no-ff` 合并，来源必须是「已验收的迭代」，合并后打 tag |
+| `dev` | 日常开发 | 所有开发 commit 都提在这里 |
+
+**发版流程**（每个迭代验收通过后执行一次）：
+
+```bash
+git switch dev && git push
+git switch master
+git merge --no-ff dev
+git tag -a v0.2.0 -m "迭代 1：认证与权限"
+git push --follow-tags
+git switch dev
+```
+
+> `master` 的起点是一个空提交（`chore: 初始化仓库`），此后所有内容都通过上面的合并进入。
 
 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/)，scope 用模块名：
 
