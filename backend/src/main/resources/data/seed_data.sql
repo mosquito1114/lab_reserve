@@ -182,7 +182,25 @@ INSERT INTO tb_time_slot (id, code, name, start_time, end_time, sort, status) VA
 (5, 'S5', '9-10节', '19:00:00', '20:40:00', 5, 1);
 
 -- ============================================================================
--- 5. 用户
+-- 5. 班级
+--    一个班属于一个学院 / 一个专业；学生的学院与专业由班级带出
+--    学生端「我的实验课表」靠 tb_reservation_class 反查班级
+-- ============================================================================
+
+INSERT INTO tb_class (id, class_name, college, major, grade, student_count, status) VALUES
+(1,  '软工2101',   '计算机学院',   '软件工程',             2021, 45, 1),
+(2,  '电信2101',   '电子信息学院', '电子信息工程',         2021, 42, 1),
+(3,  '机械2101',   '机械工程学院', '机械设计制造及其自动化', 2021, 40, 1),
+(4,  '化学2101',   '化学化工学院', '应用化学',             2021, 38, 1),
+(5,  '计科2101',   '计算机学院',   '计算机科学与技术',      2021, 46, 1),
+(6,  '通信2101',   '电子信息学院', '通信工程',             2021, 41, 1),
+(7,  '自动化2101', '机械工程学院', '自动化',               2021, 39, 1),
+(8,  '化工2101',   '化学化工学院', '化学工程与工艺',        2021, 37, 1),
+(9,  '软工2102',   '计算机学院',   '软件工程',             2021, 44, 1),
+(10, '计科2102',   '计算机学院',   '计算机科学与技术',      2021, 45, 1);
+
+-- ============================================================================
+-- 6. 用户
 --     id 1      系统管理员
 --     id 2      实验室管理员
 --     id 3-4    维修人员（校内 / 校外）
@@ -208,15 +226,15 @@ INSERT INTO tb_user (id, username, password, real_name, role_id, phone, email, n
 (15, 'tea1003',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '陈宏达',     2, '13700002003', 'tea1003@lab-reserve.local',   0, 1),
 (16, 'tea1004',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '周美玲',     2, '13700002004', 'tea1004@lab-reserve.local',   0, 1);
 
-INSERT INTO tb_student_info (user_id, student_no, college, major, class_name) VALUES
-(5,  '2021001', '计算机学院',   '软件工程',   '软工2101'),
-(6,  '2021002', '电子信息学院', '电子信息工程','电信2101'),
-(7,  '2021003', '机械工程学院', '机械设计制造','机械2101'),
-(8,  '2021004', '化学化工学院', '应用化学',   '化学2101'),
-(9,  '2021005', '计算机学院',   '计算机科学与技术','计科2101'),
-(10, '2021006', '电子信息学院', '通信工程',   '通信2101'),
-(11, '2021007', '机械工程学院', '自动化',     '自动化2101'),
-(12, '2021008', '化学化工学院', '化学工程与工艺','化工2101');
+INSERT INTO tb_student_info (user_id, student_no, class_id) VALUES
+(5,  '2021001', 1),
+(6,  '2021002', 2),
+(7,  '2021003', 3),
+(8,  '2021004', 4),
+(9,  '2021005', 5),
+(10, '2021006', 6),
+(11, '2021007', 7),
+(12, '2021008', 8);
 
 INSERT INTO tb_teacher_info (user_id, teacher_no, college, title) VALUES
 (13, 'T1001', '计算机学院',   '教授'),
@@ -231,7 +249,7 @@ INSERT INTO tb_staff_info (user_id, staff_no, department, maintainer_type) VALUE
 (4, 'M0002', '校外维保单位', 2);
 
 -- ============================================================================
--- 6. 实验室（12 间）
+-- 7. 实验室（12 间）
 -- ============================================================================
 
 INSERT INTO tb_laboratory (id, lab_no, name, location, open_time_start, open_time_end, open_weekdays, capacity, experiment_type_id, status, description) VALUES
@@ -251,7 +269,7 @@ INSERT INTO tb_laboratory (id, lab_no, name, location, open_time_start, open_tim
 -- 说明：实验室的可开展实验类型已内联在 tb_laboratory.experiment_type_id（一个实验室只开展一种固定类型），因此没有关联表。
 
 -- ============================================================================
--- 7. 设备（12 间实验室 × 7 种 = 84 台）
+-- 8. 设备（12 间实验室 × 7 种 = 84 台）
 -- ============================================================================
 
 INSERT INTO tb_equipment (resource_no, name, model, stock, status, lab_id, next_calibration_date, remark)
@@ -295,7 +313,7 @@ SELECT
 FROM labs CROSS JOIN kinds;
 
 -- ============================================================================
--- 8. 历史预约（240 条实验室 + 120 条设备），用于统计模块演示
+-- 9. 历史预约（240 条实验室 + 120 条设备），用于统计模块演示
 -- ============================================================================
 
 INSERT INTO tb_reservation (
@@ -309,9 +327,9 @@ WITH RECURSIVE x(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM x WHERE n < 239)
 SELECT
   CONCAT('R-', DATE_FORMAT(DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY), '%Y%m%d'),
          '-', LPAD(x.n + 1, 4, '0')),
-  u.id,
+  t.user_id,
   u.real_name,
-  COALESCE(s.college, t.college),
+  t.college,
   1,
   (x.n MOD 12) + 1,
   NULL,
@@ -320,10 +338,11 @@ SELECT
   ((x.n DIV 12) MOD 5) + 1,
   ELT(((x.n DIV 12) MOD 5) + 1, '08:00:00', '10:00:00', '14:00:00', '16:00:00', '19:00:00'),
   ELT(((x.n DIV 12) MOD 5) + 1, '09:40:00', '11:40:00', '15:40:00', '17:40:00', '20:40:00'),
-  15 + (x.n MOD 35),
+  -- 使用人数 = 上课班级人数，且不超过实验室容量
+  LEAST(c.student_count, l.capacity),
   -- 实验类型必须与所选实验室的可开展类型一致，所以由 lab_id 反查 ELT
   ELT((x.n MOD 12) + 1, 2, 4, 3, 2, 4, 4, 1, 2, 3, 5, 3, 5),
-  IF(u.role_id = 2, CONCAT('课程-', ELT((x.n MOD 5) + 1, '程序设计', '电路分析', '机械设计', '化工原理', '人工智能')), NULL),
+  CONCAT('课程-', ELT((x.n MOD 5) + 1, '程序设计', '电路分析', '机械设计', '化工原理', '人工智能')),
   CONCAT('实验内容：', ELT((x.n MOD 5) + 1, '基础验证实验', '综合设计实验', '数据分析实验', '硬件调试实验', '创新实践实验')),
   CASE
     WHEN x.n MOD 20 = 0 THEN 'REJECTED'
@@ -340,10 +359,20 @@ SELECT
   DATE_ADD(DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY), INTERVAL -(3 + (x.n MOD 3)) DAY),
   DATE_ADD(DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY), INTERVAL -(3 + (x.n MOD 3)) DAY)
 FROM x
-JOIN tb_user u ON u.id = 5 + (x.n MOD 12)
-LEFT JOIN tb_student_info s ON s.user_id = u.id
-LEFT JOIN tb_teacher_info t ON t.user_id = u.id;
+JOIN tb_laboratory l ON l.id = (x.n MOD 12) + 1
+-- 上课班级由 lab_id 反查，与下面 tb_reservation_class 的写入逻辑保持一致
+JOIN tb_class c ON c.id = ((l.id - 1) MOD 10) + 1
+-- 实验室只能由教师预约，按班级所属学院取该学院的教师（同一学院只取一个，避免行数翻倍）
+JOIN (SELECT college, MIN(user_id) AS user_id FROM tb_teacher_info GROUP BY college) t
+  ON t.college = c.college
+JOIN tb_user u ON u.id = t.user_id;
 
+
+-- 实验室预约必须指定上课班级（教师选班级），这里按 lab_id 反查，与学生课表口径一致
+INSERT INTO tb_reservation_class (reservation_id, class_id)
+SELECT r.id, ((r.lab_id - 1) MOD 10) + 1
+FROM tb_reservation r
+WHERE r.resource_type = 1;
 -- 设备预约（120 条）：占用键为空，不受实验室唯一索引约束
 INSERT INTO tb_reservation (
     reserve_no, applicant_id, applicant_name, applicant_college,
@@ -358,7 +387,7 @@ SELECT
          '-', LPAD(y.n + 1, 4, '0')),
   u.id,
   u.real_name,
-  COALESCE(s.college, t.college),
+  COALESCE(c.college, t.college),
   2,
   NULL,
   (y.n MOD 84) + 1,
@@ -385,11 +414,12 @@ SELECT
   DATE_ADD(DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY), INTERVAL -(2 + (y.n MOD 3)) DAY)
 FROM y
 JOIN tb_user u ON u.id = 5 + (y.n MOD 12)
-LEFT JOIN tb_student_info s ON s.user_id = u.id
+LEFT JOIN tb_student_info si ON si.user_id = u.id
+LEFT JOIN tb_class c ON c.id = si.class_id
 LEFT JOIN tb_teacher_info t ON t.user_id = u.id;
 
 -- ============================================================================
--- 9. 历史消息（给每个学生/教师制造一些站内信，用于未读角标演示）
+-- 10. 历史消息（给每个学生/教师制造一些站内信，用于未读角标演示）
 -- ============================================================================
 
 INSERT INTO tb_message (receiver_id, type, title, content, biz_type, biz_id,
@@ -416,7 +446,7 @@ FROM tb_reservation r
 WHERE r.id <= 120;
 
 -- ============================================================================
--- 10. 演示排队与候补（让"我的排队"页面一进来看得到东西）
+-- 11. 演示排队与候补（让"我的排队"页面一进来看得到东西）
 -- ============================================================================
 
 INSERT INTO tb_resource_queue (queue_no, resource_type, lab_id, equipment_id, resource_no,
@@ -435,7 +465,7 @@ FROM tb_resource_queue q
 WHERE q.queue_no = 'P-LAB-03-20251011-001';
 
 -- ============================================================================
--- 11. 演示报修工单
+-- 12. 演示报修工单
 -- ============================================================================
 
 INSERT INTO tb_repair_order (order_no, submitter_id, submitter_name, equipment_id, equipment_no,
@@ -482,7 +512,7 @@ SELECT o.id, 3, '王建国', 2, '更换电源模块 1 个，通电测试正常',
 FROM tb_repair_order o WHERE o.order_no = 'WX-20250920-0001';
 
 -- ============================================================================
--- 12. 资源更新日志样例
+-- 13. 资源更新日志样例
 -- ============================================================================
 
 INSERT INTO tb_resource_update_log (resource_type, resource_id, resource_name, operation,

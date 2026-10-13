@@ -39,19 +39,35 @@ CREATE TABLE tb_user (
   KEY idx_user_phone (phone)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表（统一账号）';
 
+CREATE TABLE tb_class (
+  id            BIGINT      NOT NULL AUTO_INCREMENT,
+  class_name    VARCHAR(50) NOT NULL COMMENT '班级名称，如 软工2101',
+  college       VARCHAR(50) NOT NULL COMMENT '所属学院',
+  major         VARCHAR(50) NOT NULL COMMENT '专业',
+  grade         INT         NOT NULL COMMENT '年级，如 2021',
+  student_count INT         NOT NULL DEFAULT 0 COMMENT '班级人数',
+  status        TINYINT     NOT NULL DEFAULT 1 COMMENT '1正常 0停用',
+  created_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at    DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_class_name (class_name),
+  KEY idx_class_college (college),
+  KEY idx_class_major (major),
+  KEY idx_class_grade (grade)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='班级表';
+
 CREATE TABLE tb_student_info (
   id         BIGINT      NOT NULL AUTO_INCREMENT,
   user_id    BIGINT      NOT NULL COMMENT '关联 tb_user.id',
   student_no VARCHAR(20) NOT NULL COMMENT '学号',
-  college    VARCHAR(50) NOT NULL COMMENT '所属学院',
-  major      VARCHAR(50) NOT NULL COMMENT '专业',
-  class_name VARCHAR(50)          DEFAULT NULL COMMENT '班级',
+  -- 学院 / 专业 / 班级名都从 tb_class 带出，这里只存外键，避免双真相源
+  class_id   BIGINT      NOT NULL COMMENT '所属班级ID',
   created_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uk_student_user (user_id),
   UNIQUE KEY uk_student_no (student_no),
-  KEY idx_student_college (college)
+  KEY idx_student_class (class_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生信息扩展表';
 
 CREATE TABLE tb_teacher_info (
@@ -248,6 +264,16 @@ CREATE TABLE tb_reservation (
   KEY idx_reservation_status (status),
   KEY idx_reservation_date (reserve_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='预约申请表';
+
+CREATE TABLE tb_reservation_class (
+  id             BIGINT   NOT NULL AUTO_INCREMENT,
+  reservation_id BIGINT   NOT NULL,
+  class_id       BIGINT   NOT NULL,
+  created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_res_class (reservation_id, class_id),
+  KEY idx_res_class_class (class_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='预约上课班级关联表（教师预约实验室时指定，学生端课表的数据来源）';
 
 CREATE TABLE tb_reservation_equipment (
   id              BIGINT   NOT NULL AUTO_INCREMENT,

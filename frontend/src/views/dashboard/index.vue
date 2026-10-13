@@ -127,7 +127,7 @@ const uptimeText = computed(() => {
 
 const skeletonItems = [
   { label: 'Docker 编排', value: 'mysql / redis / backend / frontend 四容器', done: true },
-  { label: '建表', value: 'Flyway V1__init_schema.sql · 22 张表', done: true },
+  { label: '建表', value: 'Flyway V1__init_schema.sql · 24 张表', done: true },
   { label: '种子数据', value: '5 角色 / 47 权限 / 16 用户 / 12 实验室 / 84 设备 / 360 预约', done: true },
   { label: '统一响应与异常', value: 'R<T> + GlobalExceptionHandler（HTTP 状态码 = 业务码）', done: true },
   { label: '基础设施', value: 'Redis 分布式锁 / @OpLog 操作日志 / @Sensitive 脱敏 / OSS / 异步线程池', done: true },
