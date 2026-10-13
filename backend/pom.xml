@@ -13,7 +13,7 @@
 
     <groupId>com.labreserve</groupId>
     <artifactId>lab-reserve</artifactId>
-    <version>0.1.0</version>
+    <version>0.2.0</version>
     <name>lab-reserve</name>
     <description>实验室预约管理系统</description>
 

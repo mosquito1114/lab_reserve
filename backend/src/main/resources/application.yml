@@ -135,7 +135,7 @@ aliyun:
 # 业务参数（对应 agents/req.md 的问答结论）
 # ============================================================
 lab-reserve:
-  version: 0.1.0
+  version: 0.2.0
   jwt:
     secret: ${JWT_SECRET:lab-reserve-default-secret-please-change-me-in-env-file}
     access-expire-seconds: ${JWT_ACCESS_EXPIRE:7200}
