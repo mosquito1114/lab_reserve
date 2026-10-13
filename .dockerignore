@@ -1,0 +1,27 @@
+# Docker 构建上下文排除清单（backend 与 frontend 都以仓库根为上下文）
+.git/
+.gitignore
+.gitattributes
+.editorconfig
+
+# 过程稿与凭据
+agents/
+.env
+.env.*
+
+# 后端产物
+backend/target/
+*.iml
+.idea/
+.vscode/
+
+# 前端产物
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# 文档与杂项
+docs/
+*.md
+!README.md
+.DS_Store

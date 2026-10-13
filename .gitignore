@@ -1,0 +1,56 @@
+# ============================================================
+# lab_reserve .gitignore
+# ============================================================
+
+# ---------- 本地协作过程稿（与 AI 沟通的文档，不进仓库）----------
+agents/
+
+# ---------- 凭据（绝对不能提交）----------
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+*.p12
+*.jks
+
+# ---------- Java / Maven ----------
+backend/target/
+*.class
+*.jar
+*.war
+*.ear
+!.mvn/wrapper/maven-wrapper.jar
+
+# ---------- IDE ----------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+!.vscode/extensions.json
+.settings/
+.project
+.classpath
+
+# ---------- Node / 前端 ----------
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.eslintcache
+
+# ---------- 运行期产物 ----------
+logs/
+*.log
+uploads/
+*.pid
+
+# ---------- 操作系统 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
