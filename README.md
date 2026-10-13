@@ -112,7 +112,8 @@ lab_reserve/
 │   └─ nginx/default.conf    前端静态 + /api 反代
 ├─ backend/                  Spring Boot 3（详见下方分层）
 ├─ frontend/                 Vue 3 + TS
-└─ docs/                     交付文档（需规 / 数据库设计 / 接口 / 部署）
+├─ docs/                     交付文档（需规 / 数据库设计 / 接口 / 部署）
+└─ instructs/                给协作者的说明文档（数据库表说明等）
 ```
 
 ### 后端分层
