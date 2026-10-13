@@ -17,7 +17,7 @@
 | 层 | 技术 |
 |---|---|
 | 后端 | Spring Boot 3 · MyBatis-Plus · Spring Security(JWT) |
-| 数据库 | MySQL 8（utf8mb4 / `tb_` 前缀 / 23 张表） |
+| 数据库 | MySQL 8（utf8mb4 / `tb_` 前缀 / 22 张表） |
 | 缓存与队列 | Redis 7（排队 ZSet · 收件箱 ZSet · 邮件 Redis Stream）+ Redisson（分布式锁） |
 | 前端 | Vue 3 · TypeScript · Vite · Element Plus · Pinia · ECharts |
 | 建表 | Flyway（`V1__init_schema.sql`） |
@@ -75,7 +75,7 @@ docker compose down -v     # -v 连带删除数据卷
 docker compose up -d --build
 ```
 
-启动时后端会自动：Flyway 建 23 张表 → 灌入演示种子数据。
+启动时后端会自动：Flyway 建 22 张表 → 灌入演示种子数据。
 
 ---
 

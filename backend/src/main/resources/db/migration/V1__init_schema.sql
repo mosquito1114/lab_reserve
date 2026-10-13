@@ -154,6 +154,8 @@ CREATE TABLE tb_laboratory (
   open_time_end   TIME         NOT NULL COMMENT '开放结束时间',
   open_weekdays   VARCHAR(20)  NOT NULL DEFAULT '1,2,3,4,5' COMMENT '开放星期，1=周一',
   capacity        INT          NOT NULL COMMENT '容纳人数',
+  -- 一个实验室只开展一种固定类型的实验，因此直接用外键，不需要关联表
+  experiment_type_id BIGINT    NOT NULL COMMENT '可开展实验类型ID',
   status          TINYINT      NOT NULL DEFAULT 1 COMMENT '1可用 0停用',
   description     VARCHAR(255)          DEFAULT NULL,
   created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -161,18 +163,9 @@ CREATE TABLE tb_laboratory (
   PRIMARY KEY (id),
   UNIQUE KEY uk_laboratory_no (lab_no),
   KEY idx_laboratory_status (status),
-  KEY idx_laboratory_location (location)
+  KEY idx_laboratory_location (location),
+  KEY idx_laboratory_experiment_type (experiment_type_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='实验室表';
-
-CREATE TABLE tb_lab_experiment_type (
-  id                 BIGINT   NOT NULL AUTO_INCREMENT,
-  lab_id             BIGINT   NOT NULL,
-  experiment_type_id BIGINT   NOT NULL,
-  created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_lab_experiment_type (lab_id, experiment_type_id),
-  KEY idx_let_type (experiment_type_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='实验室可开展实验类型关联表';
 
 CREATE TABLE tb_equipment (
   id                    BIGINT       NOT NULL AUTO_INCREMENT,
