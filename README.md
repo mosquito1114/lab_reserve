@@ -18,7 +18,7 @@
 |---|---|
 | 后端 | Spring Boot 3 · MyBatis-Plus · Spring Security(JWT) |
 | 数据库 | MySQL 8（utf8mb4 / `tb_` 前缀 / 23 张表） |
-| 缓存与队列 | Redis 7（排队 ZSet · 收件箱 ZSet · 邮件 Redis Stream · 分布式锁） |
+| 缓存与队列 | Redis 7（排队 ZSet · 收件箱 ZSet · 邮件 Redis Stream）+ Redisson（分布式锁） |
 | 前端 | Vue 3 · TypeScript · Vite · Element Plus · Pinia · ECharts |
 | 建表 | Flyway（`V1__init_schema.sql`） |
 | 对象存储 | 阿里云 OSS（报修故障截图） |
@@ -125,7 +125,7 @@ backend/src/main/java/com/labreserve/
 │   ├─ constant/        常量（CommonConst、RedisKeyConst）
 │   ├─ enums/           枚举（OperationModule、OperationType、SensitiveType）
 │   ├─ exception/       业务异常 + 全局异常处理器
-│   └─ result/          R<T>、PageResult、PageQuery、ResultCode
+│   └─ result/          Result<T>、PageResult、PageQuery、ResultCode
 ├─ config/            Spring 配置（MP / Redis / Jackson / Knife4j / 线程池 / Security / DataSeeder）
 ├─ util/              工具类（静态工具 + Spring 助手组件：分布式锁、OSS、脱敏）
 ├─ model/             数据模型

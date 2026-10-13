@@ -34,6 +34,7 @@
         <hutool.version>5.8.32</hutool.version>
         <easyexcel.version>3.3.4</easyexcel.version>
         <aliyun-oss.version>3.17.4</aliyun-oss.version>
+        <redisson.version>3.49.0</redisson.version>
     </properties>
 
     <dependencies>
@@ -65,6 +66,17 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
+        </dependency>
+
+        <!--
+             Redisson：只用来做分布式锁（可重入 + 看门狗自动续期 + 公平锁）。
+             常规读写一律用 StringRedisTemplate，不引入 Redisson 的对象 API。
+             用普通 redisson 而非 redisson-spring-boot-starter，避免与 Spring Data Redis 的版本纠缠。
+        -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson</artifactId>
+            <version>${redisson.version}</version>
         </dependency>
 
         <!-- ==================== 持久层 ==================== -->

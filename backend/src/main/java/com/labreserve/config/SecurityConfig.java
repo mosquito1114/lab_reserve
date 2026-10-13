@@ -23,7 +23,7 @@ import org.springframework.security.web.SecurityFilterChain;
  *   <li>白名单只留 {@code /api/auth/login}、{@code /api/auth/refresh}、{@code /api/system/health}、Knife4j 相关路径</li>
  *   <li>其余请求 {@code authenticated()}</li>
  *   <li>自定义 {@code AuthenticationEntryPoint}（401）与 {@code AccessDeniedHandler}（403），
- *       统一返回 {@code R} 格式</li>
+ *       统一返回 {@code Result} 格式</li>
  * </ul>
  */
 @Configuration

@@ -1,6 +1,6 @@
 package com.labreserve.common.exception;
 
-import com.labreserve.common.result.R;
+import com.labreserve.common.result.Result;
 import com.labreserve.common.result.ResultCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolation;
@@ -37,7 +37,7 @@ public class GlobalExceptionHandler {
     // ------------------------------------------------------------
 
     @ExceptionHandler(BizException.class)
-    public ResponseEntity<R<Object>> handleBizException(BizException ex, HttpServletRequest request) {
+    public ResponseEntity<Result<Object>> handleBizException(BizException ex, HttpServletRequest request) {
         HttpStatus status = HttpStatus.resolve(ex.getCode());
         if (status == null) {
             status = HttpStatus.BAD_REQUEST;
@@ -45,7 +45,7 @@ public class GlobalExceptionHandler {
         log.warn("[业务异常] {} {} -> {} {}", request.getMethod(), request.getRequestURI(),
                 ex.getCode(), ex.getMessage());
         return ResponseEntity.status(status)
-                .body(R.fail(ex.getCode(), ex.getMessage(), ex.getData()));
+                .body(Result.fail(ex.getCode(), ex.getMessage(), ex.getData()));
     }
 
     // ------------------------------------------------------------
@@ -54,7 +54,7 @@ public class GlobalExceptionHandler {
 
     /** {@code @RequestBody @Valid} 校验失败 */
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<R<Object>> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
+    public ResponseEntity<Result<Object>> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(GlobalExceptionHandler::formatFieldError)
                 .collect(Collectors.joining("；"));
@@ -64,7 +64,7 @@ public class GlobalExceptionHandler {
 
     /** 表单 / 查询对象绑定校验失败 */
     @ExceptionHandler(BindException.class)
-    public ResponseEntity<R<Object>> handleBindException(BindException ex) {
+    public ResponseEntity<Result<Object>> handleBindException(BindException ex) {
         String message = ex.getBindingResult().getFieldErrors().stream()
                 .map(GlobalExceptionHandler::formatFieldError)
                 .collect(Collectors.joining("；"));
@@ -74,7 +74,7 @@ public class GlobalExceptionHandler {
 
     /** {@code @Validated} 修饰的类上的方法参数校验失败 */
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<R<Object>> handleConstraintViolation(ConstraintViolationException ex) {
+    public ResponseEntity<Result<Object>> handleConstraintViolation(ConstraintViolationException ex) {
         String message = ex.getConstraintViolations().stream()
                 .map(ConstraintViolation::getMessage)
                 .collect(Collectors.joining("；"));
@@ -84,13 +84,13 @@ public class GlobalExceptionHandler {
 
     /** 缺少必填参数（本项目参数都在 body，出现此异常通常是前端调用方式不对） */
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<R<Object>> handleMissingParam(MissingServletRequestParameterException ex) {
+    public ResponseEntity<Result<Object>> handleMissingParam(MissingServletRequestParameterException ex) {
         return badRequest("缺少必填参数：" + ex.getParameterName());
     }
 
     /** 请求体不是合法 JSON */
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<R<Object>> handleNotReadable(HttpMessageNotReadableException ex) {
+    public ResponseEntity<Result<Object>> handleNotReadable(HttpMessageNotReadableException ex) {
         log.warn("[请求体解析失败] {}", ex.getMessage());
         return badRequest("请求体格式错误，应为合法的 JSON");
     }
@@ -101,25 +101,25 @@ public class GlobalExceptionHandler {
 
     /** 本项目所有接口都是 POST，用错方法时给出明确提示 */
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
-    public ResponseEntity<R<Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
+    public ResponseEntity<Result<Object>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
         log.warn("[请求方法不支持] {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
-                .body(R.fail(ResultCode.METHOD_NOT_ALLOWED,
+                .body(Result.fail(ResultCode.METHOD_NOT_ALLOWED,
                         "本系统接口统一使用 POST，收到 " + ex.getMethod()));
     }
 
     /** 上传文件超过限制 */
     @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ResponseEntity<R<Object>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+    public ResponseEntity<Result<Object>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
         log.warn("[上传文件过大] {}", ex.getMessage());
         return badRequest("上传文件过大，请压缩后重试");
     }
 
     /** 已登录但无权限（通常由 Spring Security 抛出，权限注解抛的是 BizException） */
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<R<Object>> handleAccessDenied(AccessDeniedException ex) {
+    public ResponseEntity<Result<Object>> handleAccessDenied(AccessDeniedException ex) {
         log.warn("[无权限] {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(R.fail(ResultCode.FORBIDDEN));
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Result.fail(ResultCode.FORBIDDEN));
     }
 
     // ------------------------------------------------------------
@@ -133,10 +133,10 @@ public class GlobalExceptionHandler {
      * 分布式锁没拦住时，靠 {@code uk_*} 唯一索引兜底，把数据库异常翻译成 409。
      */
     @ExceptionHandler(DuplicateKeyException.class)
-    public ResponseEntity<R<Object>> handleDuplicateKey(DuplicateKeyException ex) {
+    public ResponseEntity<Result<Object>> handleDuplicateKey(DuplicateKeyException ex) {
         log.warn("[唯一索引冲突] {}", ex.getMostSpecificCause().getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT)
-                .body(R.fail(ResultCode.CONFLICT, "数据已存在，请勿重复提交"));
+                .body(Result.fail(ResultCode.CONFLICT, "数据已存在，请勿重复提交"));
     }
 
     // ------------------------------------------------------------
@@ -144,17 +144,17 @@ public class GlobalExceptionHandler {
     // ------------------------------------------------------------
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<R<Object>> handleException(Exception ex, HttpServletRequest request) {
+    public ResponseEntity<Result<Object>> handleException(Exception ex, HttpServletRequest request) {
         log.error("[系统异常] {} {}", request.getMethod(), request.getRequestURI(), ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(R.fail(ResultCode.INTERNAL_ERROR));
+                .body(Result.fail(ResultCode.INTERNAL_ERROR));
     }
 
     // ------------------------------------------------------------
 
-    private static ResponseEntity<R<Object>> badRequest(String message) {
+    private static ResponseEntity<Result<Object>> badRequest(String message) {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(R.fail(ResultCode.BAD_REQUEST.getCode(), message));
+                .body(Result.fail(ResultCode.BAD_REQUEST.getCode(), message));
     }
 
     private static String formatFieldError(FieldError error) {

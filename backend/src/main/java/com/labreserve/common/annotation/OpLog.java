@@ -18,7 +18,7 @@ import java.lang.annotation.Target;
  * <pre>{@code
  * @OpLog(module = OperationModule.RESERVATION, type = OperationType.AUDIT, content = "审核预约")
  * @PostMapping("/audit")
- * public R<Void> audit(@RequestBody @Valid ReservationAuditDTO dto) { ... }
+ * public Result<Void> audit(@RequestBody @Valid ReservationAuditDTO dto) { ... }
  * }</pre>
  */
 @Documented

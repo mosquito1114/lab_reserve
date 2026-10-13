@@ -1,7 +1,7 @@
 package com.labreserve.controller;
 
 import com.labreserve.common.constant.CommonConst;
-import com.labreserve.common.result.R;
+import com.labreserve.common.result.Result;
 import com.labreserve.util.RedisUtils;
 import com.labreserve.model.vo.SystemHealthVO;
 import lombok.RequiredArgsConstructor;
@@ -51,7 +51,7 @@ public class SystemController {
      * </pre>
      */
     @PostMapping("/health")
-    public R<SystemHealthVO> health() {
+    public Result<SystemHealthVO> health() {
         SystemHealthVO vo = new SystemHealthVO();
         vo.setApplication(applicationName);
         vo.setVersion(version);
@@ -66,7 +66,7 @@ public class SystemController {
         vo.setRedis(redis);
         vo.setStatus("UP".equals(database) && "UP".equals(redis) ? "UP" : "DEGRADED");
 
-        return R.ok(vo);
+        return Result.ok(vo);
     }
 
     // ------------------------------------------------------------
