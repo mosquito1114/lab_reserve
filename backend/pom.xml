@@ -117,7 +117,15 @@
         <!--
              Apache Tika：一份依赖覆盖 PDF / DOCX / Markdown / PPT / XLSX / TXT
              切片前的 EXTRACT Step 调它做正文提取（仅在 R1 启用摄取时用到）。
+             说明：tika-parsers-standard-package 只聚合 各种 parser-*-module，
+             但不传递 引入 tika-core；TikaConfig / Metadata / AutoDetectParser 都住在
+             tika-core 里，因此这里需要独立声明一次。
         -->
+        <dependency>
+            <groupId>org.apache.tika</groupId>
+            <artifactId>tika-core</artifactId>
+            <version>${tika.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.apache.tika</groupId>
             <artifactId>tika-parsers-standard-package</artifactId>
