@@ -813,7 +813,7 @@ public class FairQueueService {
         while (redisson.getSemaphore("rag:sem:global").availablePermits() > 0) {
             String first = zset.pollFirst();          // 队首（高优先级、先进先出）
             if (first == null) break;
-            ragChatFanout.notify(Long.parseLong(first));   // SSE 通知"可重试"
+            ragChatFanout.notify(Long.parseLong(first));   // SSE 通知"可重试" —— v2.1: R3 占位, 实现见 RagChatFanout
         }
     }
 }
@@ -1181,6 +1181,11 @@ Qdrant 不可用 │  纯 Tool + LLM    │  仅 Tool + 直答     │ 直答模
 
 ### 4.7 SSE 前端协议
 
+> **选型已定（v2.1 修订）**：本项目后端是 Spring MVC（`spring-boot-starter-web`，未引 webflux）。
+> RAG 流式输出 = **`SseEmitter` 包 Spring AI 的 `Flux<String>`**，由 `RagStreamingAdapter`（`util/`）把
+> `ChatClient.stream().content()` 一个 chunk 一个 SSE 事件地 push 出去。优势：与项目既有 MVC 网关 /
+> `JwtAuthenticationFilter` / `@OpLog` 切面 / Knife4j 全部一致；不引入第二个 web 栈（详见 §十一）。
+
 ```
 event: chunk
 data: {"delta": "你下周一", "messageId": null}
@@ -1244,6 +1249,10 @@ class RagEvalSuiteTest {
 ```
 
 合入门槛：评估通过率 ≥ 85%。否则 block 合并。
+
+> **v2.1 修订**：门禁以本地 `mvn -B test` 为准——核心仍是 JUnit `ParameterizedTest` + Spring Boot Test。
+> 仓库当前未接 CI（无 GitHub Actions 配置）；评估失败时本地必须全绿才允许合并 dev。
+> CI 接入留到迭代 8 收尾（§十一）。
 
 ---
 
@@ -1579,5 +1588,75 @@ backend/src/main/resources/prompt/
 ```
 
 （开发完一并提交，方便运营后续调优）
+
+## 十一 · v2.1 修订记录（实施期校验 / 与现有代码对齐）
+
+> **编辑基准**：v2 文档写于迭代 0 后；正式编码开始前（R0 已合入、R1 即将启动），逐条审视
+> 与既有代码事实不一致或需进一步澄清之处。本节只**追加决策与必要的代码引用**，不重写 v2 章节。
+> 所有 v2.1 修订遵循 `AGENTS.md` 仓库约定。
+
+### 11.1 选型与架构
+
+| # | 主题 | v2 原描述 | v2.1 修订 |
+|---|---|---|---|
+| 1 | **SSE 实现路线** | 设计图写 `Flux<String>` + `MediaType.TEXT_EVENT_STREAM_VALUE`，含 WebFlux 隐含语义 | **Spring MVC + `SseEmitter` 包 Spring AI `Flux<String>`**。`pom.xml` 暂不引入 `spring-boot-starter-webflux`；新增 `rag/util/RagStreamingAdapter` 一层，负责从 `ChatClient.stream().content()` 逐 chunk 推 SSE。详见 §4.7 已嵌入 note、§6 包结构已补 `RagStreamingAdapter` |
+| 2 | **Spring AI Tool Calling 适配** | 文档示例为 `tools(...)` 接 Service 对象 | 改造为 **`@Tool` 注解 + `MethodToolCallback.of(...)`**：每个原 Service 上新增的 `xxxForRag(...)` 静态方法用 `@Tool` 标，挂 `@ToolParam(description=...)`；`RagToolRegistry` 在启动时通过 `BeanFactory` 收集这些方法，按角色过滤后传给 `ChatClient.tools(...)`。与 Spring AI 1.0 GA 的推荐写法一致 |
+| 3 | **RagChatFanout 占位** | §4.0 Step 0 调用 `ragChatFanout.notify(...)` 但类未声明 | §6 已补 `service/RagChatFanout`（R3 实现）；R1 期间提供 `notify(userId)` 占位实现，仅写一条 INFO 日志，**不影响 R1 联调** |
+| 4 | **QdrantConfig 状态上报** | 仅 `SpringAiConfig` 用了 `ObjectProvider<ChatModel>`，Qdrant 没有 | `QdrantConfig` 也返回 `ObjectProvider<QdrantClient>` 给 `RagHealthController`；`RagHealthVO` 增加字段 `qdrantGrpcReachable`（首次探活后才给 true）。R2 实装 |
+| 5 | **`@Async` MDC 传播** | 未提 | `RagAsyncConfig.ragIngestExecutor` 注入自定义 `TaskDecorator`：把调用线程的 `MDC` map（至少 `traceId`）拷贝到工作线程的 `MDC`；日志格式不动。R1 实现 |
+
+### 11.2 数据模型与表
+
+| # | 主题 | v2 原描述 | v2.1 修订 |
+|---|---|---|---|
+| 6 | **Qdrant Collection 初始化** | 仅写 `dense 1024 cosine + sparse BM25 + payload index` 一句话 | R2 实现时补一段（`io.qdrant:client:1.19.0` API）：<br>`PointsApi.createCollectionAsync(collection,`<br>`  VectorParams.newBuilder().setSize(1024).setDistance(Distance.Cosine).build(),`<br>`  SparseVectorConfig.newBuilder().setSparse(SparseVectorParams.newBuilder()`<br>`    .setIndex(SparseIndexConfig.newBuilder().setName("bm25").build()).build()).build(),`<br>`  List.of(PayloadIndexBuilder.forKeyword("status"),`<br>`       PayloadIndexBuilder.forKeyword("category"),`<br>`       PayloadIndexBuilder.forInteger("document_id")));` |
+| 7 | **`RagIngestExecutor.dispatch()` 锁粒度** | `rag:step:{docId}:{version}:{code}` 5 个 Step 锁 | 与设计图一致。R1 在 `AbstractPipelineStep.execute()` 入口套用 `RedisLockTemplate.execute(...)`；手动 `POST /steps/{code}/run` 也走同一把锁，确保"单步重试"与"全链重跑"不并发 |
+| 8 | **`tb_rag_document.category` 枚举值** | "REGULATION / MANUAL / FAQ / SOP" 四值 + "PDF_SCAN" | 后端实装 `RagDocumentCategory` 枚举与上述四值一致；"PDF_SCAN" 不是 category，是 chunk 策略维度的 `FixedOverlapStrategy.recommendedFor`。**前端 Upload UI 用 `category` 控制默认 `chunkingStrategy` 推荐** |
+
+### 11.3 切片策略可插拔（§3.10 落地细化）
+
+| # | 主题 | v2 原描述 | v2.1 修订 |
+|---|---|---|---|
+| 9 | **RECURSIVE 算法要点** | "多级分隔符优先级递归" | R1 实现按下面伪代码（每级分隔符按列表顺序优先尝试；能在 `maxChars` 内就停，过长再降级切）：`seps = ["\\n\\n", "\\n", "。", "！", "？", "；", " ", ""]`；递归 `split(text, seps, idx)`：能装下 emit；否则 `text.split(seps[idx], keep=true)` 后再次 join 进 windows；末尾用固定窗兜底。overlap：相邻 chunk 尾巴追加下个 chunk 头部至多 `overlap` 字符 |
+| 10 | **QA 模式正则权重合并** | "4-5 种" | R1 实现给一个最小集（按出现顺序扫描）：`Q_PREFIX = ^(Q[\\.:：]\\s*\|问题[:：]?\\s*\|第[一二三四五六七八九十百\\d]+问)\\s*`、`A_PREFIX = ^(A[\\.:：]\\s*\|答案[:：]?\\s*\|解答[:：]?\\s*)`；分片规则：扫到 Q_PREFIX 开始，扫到 A_PREFIX 起为 A，扫到下一个 Q_PREFIX 闭合；最短 1 问 1 答，最长到 `maxChars`（默认 2000，QA 不消费 overlap） |
+| 11 | **切片长度单位** | 含糊 | 一律按 Java `String.length()` 即 Unicode code units（与 `int chars` 计数一致）；中文一行在 UTF-8 是 3 字节但计 1 字符。文本进入切片前过 `Normalizer.normalize(text, NFC)`。**对中文友好的语义边界优先级：段落 > 行 > 句号 > 标点 > 空隙** |
+
+### 11.4 安全 / 性能 / 门禁
+
+| # | 主题 | v2 原描述 | v2.1 修订 |
+|---|---|---|---|
+| 12 | **流式后处理脱敏钩子** | §4.6 四道墙只有"内容安全二审"一句话 | R3 实施：在 `RagStreamingAdapter` 流出口加 `RagStreamingPostProcessor`（`util/`），对每个 chunk 同时跑两道正则：(a) 11 位大陆手机号 → 替换；(b) 18 位身份证号 → 替换成 `[已脱敏]` 并写一条 `QUERY_PHONE`-语义的操作日志（注意：身份证一旦命中，说明知识库里有问题，转 `OpLog` 给管理员） |
+| 13 | **门禁模式** | "评估 ≥85% block 合并" | 仅本地 `mvn -B test` 为准（仓库当前无 CI）。`RagEvalSuiteTest` R3 起合并；R4 扩到 20 条；R5 锁 30 条 / ≥85%。CI 接入留到迭代 8 |
+| 14 | **`maxFileMb` 取值来源** | 上传端写 `MAX_FILE_MB * 1024L * 1024L` | R1 实施：`ragDocumentService.uploadAndDispatch(...)` 改为 `props.getIngest().getMaxFileMb()`，与 `application.yml` 的 `lab-reserve.rag.ingest.max-file-mb` 唯一一致。**硬编码的 `MAX_FILE_MB` 常量不引入** |
+
+### 11.5 R1 首版范围与交付物（按你刚确认）
+
+- **包 / 类新增**：
+  - `rag/pipeline/{AbstractPipelineStep, ExtractStep, SanitizeStep, ChunkStep, RagIngestExecutor}`
+  - `rag/pipeline/chunk/{RecursiveStrategy, QaStrategy, FixedOverlapStrategy}` 的真实 `split()` 实现
+  - `rag/adapter/TikaAdapter`（`@Component`，调 `org.apache.tika` 解析 PDF/DOCX/MD/TXT/PPT/XLSX）
+  - `rag/adapter/SensitiveScanFilter`（SANITIZE Step 内置：身份证/手机号计数 + 输出统计）
+  - `rag/service/RagDocumentService(+Impl)` / `rag/service/RagIngestDispatcher`（`@Async` 派发）
+  - `rag/service/RagChatFanout`（R3 占位，R1 仅空实现）
+  - `rag/controller/RagAdminController`（6 个接口除去 chunks/timeline，可放到 R2）
+  - `rag/model/dto/{DocumentUploadDTO, StepRunDTO, FeedbackDTO, ReingestDTO}`（R1 至少前三个）
+  - `rag/model/vo/{RagDocumentVO, RagStepTimelineVO, RagChunkVO}`
+  - `rag/enums/RagDocumentCategory`（REGULATION / MANUAL / FAQ / SOP）
+  - `rag/util/MdcTaskDecorator`
+  - `common/constant/RagConst`（Redis keys 等需要时再补）
+- **State machine 推进规则**：R1 实现 CREATED → EXTRACTING → EXTRACTED → SANITIZING → SANITIZED → CHUNKING → CHUNKED；FAILED 可与任一中间态互转；DISABLED 仅人工（admin enable/disable 接口，R1 末实现）
+- **自动续跑**：R1 不实现 `RecoveryRunner`，单步重试靠 `POST /steps/{code}/run`；R5 起加自动续跑
+- **测试**：R1 自测 ≥3 份真实文件（PDF/DOCX/MD 各一），覆盖三种策略切换、手动单步重试、sha 幂等、admin enable/disable
+
+### 11.6 与既有代码的事实校对
+
+- V2 已 `INSERT IGNORE` 6 个 RAG 权限码与角色分配；V3 修补 Flyway + `INSERT...SELECT` 静默吞的坑。
+  新增 RAG 权限码**改用 V4 迁移**追加，绝不二次改 V2 / V3。
+- `RagHealthController` 已经列出 `ChunkingStrategyRegistry` 已注册的策略；R1 实施时确保 Registry 在启动日志打一行
+  `[RAG] 已注册 3 个切片策略: [RECURSIVE, QA, FIXED_OVERLAP]`（现有代码已实现）。
+- `RagPipelineState` 当前 `READY / DISABLED / FAILED` 的转移函数在 R1 不写；R2 末接入。
+- `RagIngestExecutor` 用现有 `RagAsyncConfig.ragIngestExecutor` 线程池（最大 8，队列 500）。
+- 上传文件 `objectKey` 走 `AliyunOssTemplate.buildObjectKey("RAG_DOC", originalFilename)`，
+  目录 `lab-reserve/RAG_DOC/yyyy/MM/uuid.ext`；**OSS 未配置时上传直接 400 而不是 NPE**。
 
 —— 完 ——
