@@ -48,6 +48,9 @@ public class RagDocument implements Serializable {
     private Integer charCount;
     private Integer chunkCount;
 
+    /** 业务启停标志：1 启用 (参与检索) / 0 停用（与 pipeline_state 解耦） */
+    private Integer status;
+
     /** EXTRACT Step 解析后的原文（Tika 输出）；MEDIUMTEXT，最大 16 MB */
     private String rawText;
 
