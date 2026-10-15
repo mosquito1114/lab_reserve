@@ -16,7 +16,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 // 排除 Spring Security 的默认内存用户：本项目用 JWT + 自定义 PermissionService，
 // 不排除的话启动日志里会打印一个「generated security password」的告警，容易误导。
 @SpringBootApplication(exclude = UserDetailsServiceAutoConfiguration.class)
-@MapperScan("com.labreserve.mapper")
+@MapperScan({
+        "com.labreserve.mapper",
+        // RAG 迭代新增: 父 @MapperScan 只覆盖 7 个业务模块的 mapper,
+        // RAG 子模块的 mapper (RagDocumentMapper 等) 路径不在,这里补上
+        "com.labreserve.rag.mapper"
+})
 @EnableAsync(proxyTargetClass = true)
 @EnableScheduling
 public class LabReserveApplication {
