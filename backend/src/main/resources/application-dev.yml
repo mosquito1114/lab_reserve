@@ -14,15 +14,6 @@ spring:
     hikari:
       maximum-pool-size: 10
 
-# ============================================================
-# 开发期 RAG 默认开启（如要临时关闭，可设 RAG_ENABLED=false）
-# 没有 LLM 凭据 / Qdrant 容器时，应用启动会报 ConnectionException，
-# 此时在 .env 取消 RAG_ENABLED=true 让 R0 / R1 骨架跑通。
-# ============================================================
-lab-reserve:
-  rag:
-    enabled: ${RAG_ENABLED:true}     # dev 默认开启；R0 / R1 没有凭据时可显式设为 false
-
 mybatis-plus:
   configuration:
     # 控制台输出执行的 SQL 与参数
@@ -35,6 +26,5 @@ logging:
     # 打印 Mapper 层 SQL
     com.labreserve.mapper: debug
     org.springframework.jdbc.core: debug
-    com.labreserve.rag: debug             # RAG 子包独立日志级别
   pattern:
     console: "%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"

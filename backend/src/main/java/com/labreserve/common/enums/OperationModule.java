@@ -19,12 +19,6 @@ public enum OperationModule {
     MESSAGE("message", "消息通知"),
     STATISTICS("statistics", "数据统计"),
     SYSTEM("system", "系统管理"),
-
-    /**
-     * 智能问答（RAG）模块。
-     * <p>该模块的所有 {@code @OpLog} 都打这个 module，便于按模块筛操作日志。
-     */
-    RAG("rag", "智能问答"),
     ;
 
     /** 存入数据库的编码 */

@@ -58,13 +58,8 @@ INSERT INTO tb_permission (code, name, module, description) VALUES
 -- 字典
 ('dict:list',           '查询字典',       'dict',        NULL),
 ('dict:manage',         '维护字典',       'dict',        '实验类型 / 时段'),
--- 班级（学生端「我的实验课表」按班级反查）
-('class:list',          '查询班级',       'class',       NULL),
-('class:manage',        '维护班级',       'class',       '班级名称 / 学院 / 专业 / 年级'),
--- 预约（req.md §10 变更 1：实验室仅教师可约、设备师生都可约）
-('reservation:lab:create',       '提交实验室预约', 'reservation', '仅教师，需指定上课班级'),
-('reservation:equipment:create', '提交设备预约',   'reservation', NULL),
-('reservation:timetable',        '我的实验课表',   'reservation', '学生端，按班级反查 tb_reservation_class'),
+-- 预约
+('reservation:create',  '提交预约',       'reservation', NULL),
 ('reservation:list',    '查询本人预约',   'reservation', NULL),
 ('reservation:list-all','查询全部预约',   'reservation', NULL),
 ('reservation:view',    '查看预约详情',   'reservation', NULL),
@@ -105,37 +100,20 @@ INSERT INTO tb_permission (code, name, module, description) VALUES
 -- 3. 角色 → 权限矩阵（用 code 关联，避免硬编码 permission_id）
 -- ============================================================================
 
--- 学生：设备预约 + 我的实验课表 + 排队 + 报修 + 消息
+-- 学生 / 教师：预约 + 排队 + 报修 + 消息
 INSERT INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
     'resource:lab:list', 'resource:equip:list',
-    'dict:list', 'class:list',
-    'reservation:equipment:create', 'reservation:timetable',
-    'reservation:list', 'reservation:view', 'reservation:cancel',
+    'dict:list',
+    'reservation:create', 'reservation:list', 'reservation:view', 'reservation:cancel',
     'change:create',
     'queue:create', 'queue:cancel', 'queue:confirm',
     'repair:create',
     'message:list'
 )
-WHERE r.code = 'STUDENT';
-
--- 教师：实验室排课（必须指定上课班级）+ 设备预约 + 排队 + 报修 + 消息
-INSERT INTO tb_role_permission (role_id, permission_id)
-SELECT r.id, p.id
-FROM tb_role r
-JOIN tb_permission p ON p.code IN (
-    'resource:lab:list', 'resource:equip:list',
-    'dict:list', 'class:list',
-    'reservation:lab:create', 'reservation:equipment:create',
-    'reservation:list', 'reservation:view', 'reservation:cancel',
-    'change:create',
-    'queue:create', 'queue:cancel', 'queue:confirm',
-    'repair:create',
-    'message:list'
-)
-WHERE r.code = 'TEACHER';
+WHERE r.code IN ('STUDENT', 'TEACHER');
 
 -- 系统管理员：用户管理 + 全部日志与统计
 INSERT INTO tb_role_permission (role_id, permission_id)
@@ -144,7 +122,7 @@ FROM tb_role r
 JOIN tb_permission p ON p.code IN (
     'user:list', 'user:view', 'user:create', 'user:update', 'user:disable', 'user:view-phone',
     'resource:lab:list', 'resource:equip:list', 'resource:log:list',
-    'dict:list', 'class:list', 'class:manage',
+    'dict:list',
     'message:list', 'message:delivery-log',
     'stat:view', 'stat:export',
     'system:role:list', 'system:role:update', 'system:permission:list',
@@ -162,7 +140,6 @@ JOIN tb_permission p ON p.code IN (
     'resource:equip:list', 'resource:equip:create', 'resource:equip:update', 'resource:equip:disable',
     'resource:log:list',
     'dict:list', 'dict:manage',
-    'class:list', 'class:manage',
     'reservation:list', 'reservation:list-all', 'reservation:view',
     'reservation:audit', 'reservation:release',
     'change:list', 'change:audit',

@@ -13,7 +13,7 @@
 
     <groupId>com.labreserve</groupId>
     <artifactId>lab-reserve</artifactId>
-    <version>0.2.0</version>
+    <version>0.1.0</version>
     <name>lab-reserve</name>
     <description>实验室预约管理系统</description>
 
@@ -35,32 +35,7 @@
         <easyexcel.version>3.3.4</easyexcel.version>
         <aliyun-oss.version>3.17.4</aliyun-oss.version>
         <redisson.version>3.49.0</redisson.version>
-
-        <!--
-            RAG 模块依赖：Spring AI 1.x + Qdrant Java SDK + Apache Tika
-            - spring-ai-bom 统一管理 spring-ai-* 系列版本，避免单独锁版本带来的依赖纠缠
-            - tika-parsers-standard-package 一份依赖覆盖 PDF/DOCX/MD/PPT/XLSX
-        -->
-        <spring-ai.version>1.0.0</spring-ai.version>
-        <qdrant.version>1.19.0</qdrant.version>
-        <tika.version>2.9.2</tika.version>
     </properties>
-
-    <dependencyManagement>
-        <dependencies>
-            <!--
-                Spring AI BOM：把所有 spring-ai-* 的版本对齐到同一 release train。
-                当 1.x 升级到 1.0.1 / 1.1 时只改这里即可，避免依赖版本错位。
-            -->
-            <dependency>
-                <groupId>org.springframework.ai</groupId>
-                <artifactId>spring-ai-bom</artifactId>
-                <version>${spring-ai.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
 
     <dependencies>
         <!-- ==================== Spring Boot 基础 ==================== -->
@@ -91,37 +66,6 @@
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
-        </dependency>
-
-        <!--
-             Spring AI（迭代 R0 引入；默认 enabled=false 时不创建 Bean）：
-             - starter-model-openai 客户端，OpenAI 兼容协议（DeepSeek / 通义千问 / OpenAI 都支持）
-             - 流式输出需要 reactor，spring-ai-starter-model-openai 会传递依赖 spring-webflux
-        -->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
-        </dependency>
-
-        <!--
-             Qdrant 向量库（gRPC）：用 io.qdrant 官方 Java SDK，直接走 6334 端口性能更好；
-             仅当 lab-reserve.rag.enabled=true 时才真正创建 Bean（详见 QdrantConfig）。
-             注：artifactId 是 client（不是 qdrant-java），与坐标 {groupId:io.qdrant, artifactId:client} 一致
-        -->
-        <dependency>
-            <groupId>io.qdrant</groupId>
-            <artifactId>client</artifactId>
-            <version>${qdrant.version}</version>
-        </dependency>
-
-        <!--
-             Apache Tika：一份依赖覆盖 PDF / DOCX / Markdown / PPT / XLSX / TXT
-             切片前的 EXTRACT Step 调它做正文提取（仅在 R1 启用摄取时用到）。
-        -->
-        <dependency>
-            <groupId>org.apache.tika</groupId>
-            <artifactId>tika-parsers-standard-package</artifactId>
-            <version>${tika.version}</version>
         </dependency>
 
         <!--

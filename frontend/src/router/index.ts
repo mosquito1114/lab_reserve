@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { getToken } from '@/utils/request'
-import { useUserStore } from '@/stores/user'
 
 const APP_TITLE = import.meta.env.VITE_APP_TITLE || '实验室预约管理系统'
 
@@ -31,18 +30,6 @@ export const routes: RouteRecordRaw[] = [
         name: 'Dashboard',
         component: () => import('@/views/dashboard/index.vue'),
         meta: { title: '首页', icon: 'HomeFilled' }
-      },
-      {
-        path: 'system/role',
-        name: 'SystemRole',
-        component: () => import('@/views/system/RoleView.vue'),
-        meta: { title: '角色权限', icon: 'Lock', permission: 'system:role:list' }
-      },
-      {
-        path: 'system/operation-log',
-        name: 'SystemOperationLog',
-        component: () => import('@/views/system/OperationLogView.vue'),
-        meta: { title: '操作日志', icon: 'Document', permission: 'system:log:list' }
       }
       // ↓↓↓ 后续迭代在此按模块追加子路由 ↓↓↓
       // 预约管理：/reservation/apply  /reservation/my  /reservation/audit  /reservation/change-audit
@@ -74,7 +61,7 @@ const router = createRouter({
   scrollBehavior: () => ({ top: 0 })
 })
 
-router.beforeEach(async (to) => {
+router.beforeEach((to) => {
   const title = to.meta.title as string | undefined
   document.title = title ? `${title} · ${APP_TITLE}` : APP_TITLE
 
@@ -90,24 +77,6 @@ router.beforeEach(async (to) => {
   // 未登录 → 跳登录页，并记住来源
   if (!getToken()) {
     return { path: '/login', query: { redirect: to.fullPath } }
-  }
-
-  // 已登录但用户信息还没加载（刷新页面）→ 先拉一次，拿到权限码才能判断路由权限
-  const userStore = useUserStore()
-  if (!userStore.userInfo) {
-    try {
-      await userStore.fetchInfo()
-    } catch {
-      // token 失效 / 账号被注销：清本地状态回登录页
-      userStore.reset()
-      return { path: '/login', query: { redirect: to.fullPath } }
-    }
-  }
-
-  // 页面级权限：meta.permission 没通过 → 403
-  const permission = to.meta.permission as string | undefined
-  if (permission && !userStore.hasPermission(permission)) {
-    return { path: '/403' }
   }
 
   return true

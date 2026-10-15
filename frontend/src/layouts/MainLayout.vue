@@ -17,23 +17,11 @@
           active-text-color="#ffffff"
           router
         >
-          <!-- 菜单由后端按权限下发（见 MenuService），这里只负责渲染 -->
-          <template v-for="menu in userStore.menus" :key="menu.path">
-            <el-sub-menu v-if="menu.children?.length" :index="menu.path">
-              <template #title>
-                <el-icon><component :is="menu.icon || 'Menu'" /></el-icon>
-                <span>{{ menu.title }}</span>
-              </template>
-              <el-menu-item v-for="child in menu.children" :key="child.path" :index="child.path">
-                <el-icon><component :is="child.icon || 'Menu'" /></el-icon>
-                <template #title>{{ child.title }}</template>
-              </el-menu-item>
-            </el-sub-menu>
-            <el-menu-item v-else :index="menu.path">
-              <el-icon><component :is="menu.icon || 'Menu'" /></el-icon>
-              <template #title>{{ menu.title }}</template>
-            </el-menu-item>
-          </template>
+          <el-menu-item index="/dashboard">
+            <el-icon><HomeFilled /></el-icon>
+            <template #title>首页</template>
+          </el-menu-item>
+          <!-- 后续迭代按模块追加菜单项，并按权限过滤 -->
         </el-menu>
       </el-scrollbar>
     </el-aside>
@@ -67,10 +55,6 @@
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item disabled>{{ roleLabel }}</el-dropdown-item>
-                <el-dropdown-item command="password">
-                  <el-icon><Key /></el-icon>
-                  修改密码
-                </el-dropdown-item>
                 <el-dropdown-item command="logout" divided>
                   <el-icon><SwitchButton /></el-icon>
                   退出登录
@@ -90,41 +74,14 @@
         </router-view>
       </el-main>
     </el-container>
-
-  <!-- ---------- 修改密码 ---------- -->
-  <el-dialog v-model="passwordVisible" title="修改密码" width="420px">
-    <el-alert
-      class="mb-16"
-      type="warning"
-      :closable="false"
-      title="修改成功后当前登录会立即失效，需要用新密码重新登录"
-      show-icon
-    />
-    <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="88px">
-      <el-form-item label="原密码" prop="oldPassword">
-        <el-input v-model="passwordForm.oldPassword" type="password" show-password placeholder="请输入原密码" />
-      </el-form-item>
-      <el-form-item label="新密码" prop="newPassword">
-        <el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="6~64 位" />
-      </el-form-item>
-      <el-form-item label="确认新密码" prop="confirmPassword">
-        <el-input v-model="passwordForm.confirmPassword" type="password" show-password placeholder="再次输入新密码" />
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="passwordVisible = false">取消</el-button>
-      <el-button type="primary" :loading="passwordSaving" @click="handlePasswordSubmit">确定</el-button>
-    </template>
-  </el-dialog>
   </el-container>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
-import { updatePassword } from '@/api/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -139,81 +96,7 @@ const displayName = computed(() => userStore.realName || '未登录')
 const roleLabel = computed(() => userStore.roleName || '游客')
 const avatarText = computed(() => (userStore.realName ? userStore.realName.charAt(0) : '游'))
 
-// ---------------- 修改密码 ----------------
-
-interface PasswordForm {
-  oldPassword: string
-  newPassword: string
-  confirmPassword: string
-}
-
-const passwordVisible = ref(false)
-const passwordSaving = ref(false)
-const passwordFormRef = ref<FormInstance>()
-const passwordForm = reactive<PasswordForm>({
-  oldPassword: '',
-  newPassword: '',
-  confirmPassword: ''
-})
-
-const passwordRules: FormRules<PasswordForm> = {
-  oldPassword: [{ required: true, message: '请输入原密码', trigger: 'blur' }],
-  newPassword: [
-    { required: true, message: '请输入新密码', trigger: 'blur' },
-    { min: 6, max: 64, message: '密码长度需在 6~64 位之间', trigger: 'blur' }
-  ],
-  confirmPassword: [
-    { required: true, message: '请再次输入新密码', trigger: 'blur' },
-    {
-      validator: (_rule, value: string, callback) => {
-        if (value !== passwordForm.newPassword) {
-          callback(new Error('两次输入的新密码不一致'))
-          return
-        }
-        callback()
-      },
-      trigger: 'blur'
-    }
-  ]
-}
-
-function openPasswordDialog(): void {
-  passwordForm.oldPassword = ''
-  passwordForm.newPassword = ''
-  passwordForm.confirmPassword = ''
-  passwordVisible.value = true
-}
-
-async function handlePasswordSubmit(): Promise<void> {
-  if (!passwordFormRef.value) {
-    return
-  }
-  const valid = await passwordFormRef.value.validate().catch(() => false)
-  if (!valid) {
-    return
-  }
-  passwordSaving.value = true
-  try {
-    await updatePassword({
-      oldPassword: passwordForm.oldPassword,
-      newPassword: passwordForm.newPassword
-    })
-    ElMessage.success('密码修改成功，请用新密码重新登录')
-    passwordVisible.value = false
-    userStore.reset()
-    await router.replace('/login')
-  } finally {
-    passwordSaving.value = false
-  }
-}
-
-// ---------------- 顶部下拉 ----------------
-
 async function handleCommand(command: string): Promise<void> {
-  if (command === 'password') {
-    openPasswordDialog()
-    return
-  }
   if (command !== 'logout') {
     return
   }
@@ -229,17 +112,6 @@ async function handleCommand(command: string): Promise<void> {
   await userStore.logout()
   await router.replace('/login')
 }
-
-// 刷新页面后 token 还在但用户信息为空，这里补一次请求（菜单与权限依赖它）
-onMounted(async () => {
-  if (userStore.isLogin && !userStore.userInfo) {
-    try {
-      await userStore.fetchInfo()
-    } catch {
-      await router.replace('/login')
-    }
-  }
-})
 </script>
 
 <style scoped lang="scss">

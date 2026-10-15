@@ -1,6 +1,6 @@
 package com.labreserve.util;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
@@ -31,10 +31,10 @@ import java.util.concurrent.TimeUnit;
  * 设计上不设过期，因此 Redis 的 {@code maxmemory-policy} 必须是 {@code noeviction}。
  */
 @Component
+@RequiredArgsConstructor
 public class RedisUtils {
 
-    @Autowired
-    private StringRedisTemplate redis;
+    private final StringRedisTemplate redis;
 
     /** 需要原生 API 时直接用（例如 Redis Stream 的 XADD / XREADGROUP） */
     public StringRedisTemplate template() {

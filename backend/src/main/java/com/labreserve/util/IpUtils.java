@@ -1,11 +1,10 @@
 package com.labreserve.util;
 
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 /**
- * 客户端 IP 提取工具（IOC 组件，用 {@code @Autowired} 注入使用）。
+ * 客户端 IP 提取工具。
  *
  * <p>操作日志必须记录真实 IP。生产环境前端经过 nginx 反代，
  * 因此要优先读 {@code X-Forwarded-For}。
@@ -14,8 +13,10 @@ import org.springframework.util.StringUtils;
  * {@code server.forward-headers-strategy: framework}，
  * 否则容器内拿到的 remoteAddr 只是 nginx 的地址。
  */
-@Component
-public class IpUtils {
+public final class IpUtils {
+
+    private IpUtils() {
+    }
 
     private static final String UNKNOWN = "unknown";
 
@@ -33,7 +34,7 @@ public class IpUtils {
      *
      * <p>X-Forwarded-For 可能是逗号分隔的链路，取第一个非 unknown 的地址。
      */
-    public String getClientIp(HttpServletRequest request) {
+    public static String getClientIp(HttpServletRequest request) {
         if (request == null) {
             return UNKNOWN;
         }
@@ -59,7 +60,7 @@ public class IpUtils {
     /**
      * 截断 User-Agent 到数据库列宽以内（tb_operation_log.user_agent 为 VARCHAR(255)）。
      */
-    public String truncateUserAgent(String userAgent) {
+    public static String truncateUserAgent(String userAgent) {
         if (userAgent == null) {
             return null;
         }

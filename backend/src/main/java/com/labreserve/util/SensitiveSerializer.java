@@ -37,8 +37,7 @@ public class SensitiveSerializer extends JsonSerializer<String> implements Conte
             gen.writeNull();
             return;
         }
-        // 本类由 Jackson 实例化，拿不到 Spring 注入，因此用静态兜底方法
-        gen.writeString(SensitiveUtils.staticMask(value, type));
+        gen.writeString(SensitiveUtils.mask(value, type));
     }
 
     @Override

@@ -1,24 +1,24 @@
 package com.labreserve.util;
 
 import com.labreserve.model.vo.LoginUser;
+
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Component;
 
 /**
- * 当前登录用户读取工具（IOC 组件，用 {@code @Autowired} 注入使用）。
+ * 当前登录用户读取工具。
  *
- * <p>数据来自 Spring Security 的 {@code SecurityContext}（由
- * {@code JwtAuthenticationFilter} 从 token 还原），未登录（或匿名）时所有方法返回 {@code null}。
- *
- * <p>操作日志切面会在未登录场景下把操作人记为 null（例如登录失败）。
+ * <p>未登录（或匿名）时所有方法都返回 {@code null}，调用方需自行判空。
+ * 操作日志切面会在未登录场景下把操作人记为 null（例如登录失败）。
  */
-@Component
-public class SecurityUtils {
+public final class SecurityUtils {
+
+    private SecurityUtils() {
+    }
 
     /** 获取当前登录用户；未登录返回 null */
-    public LoginUser getLoginUser() {
+    public static LoginUser getLoginUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null
                 || !authentication.isAuthenticated()
@@ -30,42 +30,41 @@ public class SecurityUtils {
     }
 
     /** 当前用户 ID；未登录返回 null */
-    public Long getUserId() {
+    public static Long getUserId() {
         LoginUser user = getLoginUser();
         return user == null ? null : user.getUserId();
     }
 
     /** 当前用户名；未登录返回 null */
-    public String getUsername() {
+    public static String getUsername() {
         LoginUser user = getLoginUser();
         return user == null ? null : user.getUsername();
     }
 
     /** 当前用户真实姓名；未登录返回 null */
-    public String getRealName() {
+    public static String getRealName() {
         LoginUser user = getLoginUser();
         return user == null ? null : user.getRealName();
     }
 
     /** 当前用户角色编码；未登录返回 null */
-    public String getRoleCode() {
+    public static String getRoleCode() {
         LoginUser user = getLoginUser();
         return user == null ? null : user.getRoleCode();
     }
 
     /** 当前用户角色 ID；未登录返回 null */
-    public Long getRoleId() {
+    public static Long getRoleId() {
         LoginUser user = getLoginUser();
         return user == null ? null : user.getRoleId();
     }
 
-    /** 是否已登录 */
-    public boolean isLogin() {
+    public static boolean isLogin() {
         return getLoginUser() != null;
     }
 
     /** 判断当前用户是否属于指定角色 */
-    public boolean hasRole(String roleCode) {
+    public static boolean hasRole(String roleCode) {
         String current = getRoleCode();
         return current != null && current.equals(roleCode);
     }

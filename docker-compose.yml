@@ -89,8 +89,6 @@ services:
       # 容器网络内主机名覆盖
       MYSQL_HOST: mysql
       REDIS_HOST: redis
-      # RAG：默认依赖 qdrant 主机名覆盖（开启后才会真连）
-      QDRANT_HOST: qdrant
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     depends_on:
@@ -98,9 +96,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # qdrant 不健康不强阻塞：RAG_ENABLED=false 时 backend 根本不连它
-      qdrant:
-        condition: service_started
     healthcheck:
       # 注意：本项目接口统一 POST，健康检查也必须用 POST
       test: ["CMD-SHELL", "curl -fsS -X POST http://127.0.0.1:8080/api/system/health >/dev/null || exit 1"]
@@ -108,35 +103,6 @@ services:
       timeout: 5s
       retries: 20
       start_period: 60s
-    networks:
-      - lab-net
-
-  # ------------------------------------------------------------
-  # Qdrant 向量库（迭代 R0 引入）
-  #
-  # 默认启动但不挂强制依赖：RAG_ENABLED=false 时 backend 不会去连它。
-  # 6333 = REST 控制台 / 健康检查 / Web UI（调试）
-  # 6334 = gRPC（Java SDK 连这个）
-  # ------------------------------------------------------------
-  qdrant:
-    image: qdrant/qdrant:v1.12.0
-    container_name: lab-reserve-qdrant
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      TZ: ${TZ:-Asia/Shanghai}
-    ports:
-      - "${QDRANT_PORT:-6333}:6333"
-      - "${QDRANT_GRPC_PORT:-6334}:6334"
-    volumes:
-      - qdrant-data:/qdrant/storage
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:6333/healthz 2>/dev/null | grep -q ok || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
     networks:
       - lab-net
 
@@ -170,8 +136,6 @@ volumes:
     name: lab-reserve-mysql-data
   redis-data:
     name: lab-reserve-redis-data
-  qdrant-data:
-    name: lab-reserve-qdrant-data
 
 networks:
   lab-net:

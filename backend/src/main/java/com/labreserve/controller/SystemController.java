@@ -4,7 +4,7 @@ import com.labreserve.common.constant.CommonConst;
 import com.labreserve.common.result.Result;
 import com.labreserve.util.RedisUtils;
 import com.labreserve.model.vo.SystemHealthVO;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
@@ -28,14 +28,12 @@ import java.util.stream.Collectors;
 @Slf4j
 @RestController
 @RequestMapping("/api/system")
+@RequiredArgsConstructor
 public class SystemController {
 
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
-    @Autowired
-    private RedisUtils redisUtils;
-    @Autowired
-    private Environment environment;
+    private final JdbcTemplate jdbcTemplate;
+    private final RedisUtils redisUtils;
+    private final Environment environment;
 
     @Value("${spring.application.name:lab-reserve}")
     private String applicationName;
