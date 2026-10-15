@@ -119,7 +119,9 @@ services:
   # 6334 = gRPC（Java SDK 连这个）
   # ------------------------------------------------------------
   qdrant:
-    image: qdrant/qdrant:v1.12.0
+    # 客户端 io.qdrant:client:1.19.0 (pom.xml) 与服务端版本严格对齐;
+    # 旧 v1.12 与 1.19 客户端序列化 dense vector 格式不兼容(服务端报 dim got 0)。
+    image: qdrant/qdrant:v1.19.0
     container_name: lab-reserve-qdrant
     restart: unless-stopped
     env_file:

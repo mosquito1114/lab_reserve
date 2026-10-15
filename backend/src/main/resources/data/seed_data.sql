@@ -99,7 +99,15 @@ INSERT INTO tb_permission (code, name, module, description) VALUES
 ('system:role:update',  '修改角色权限',   'system',      NULL),
 ('system:permission:list','查询权限点',   'system',      NULL),
 ('system:log:list',     '查询操作日志',   'system',      NULL),
-('system:log:export',   '导出操作日志',   'system',      NULL);
+('system:log:export',   '导出操作日志',   'system',      NULL),
+-- RAG 智能问答（与 V2/V3 迁移一致；放这里是因为角色表由本脚本灌入,
+--    Flyway 阶段 INSERT...SELECT FROM tb_role 时 tb_role 还是空表, 会静默 0 行）
+('rag:chat:query',      '发起 RAG 提问',  'rag',         'POST /api/rag/chat/send'),
+('rag:chat:history',    '查看会话与消息历史', 'rag',     '查自己 session/message'),
+('rag:doc:upload',      '上传知识库文档', 'rag',         'POST /api/rag/admin/documents/upload'),
+('rag:doc:list',        '文档列表与元数据', 'rag',       'GET .../documents 与 .../chunking-strategies'),
+('rag:doc:reindex',     '重建摄取/改切片策略', 'rag',     'POST .../reingest, PATCH .../chunking, POST .../steps/*/run'),
+('rag:doc:delete',      '停用/启用文档',  'rag',         'POST .../disable, POST .../enable');
 
 -- ============================================================================
 -- 3. 角色 → 权限矩阵（用 code 关联，避免硬编码 permission_id）
@@ -185,6 +193,30 @@ JOIN tb_permission p ON p.code IN (
     'message:list'
 )
 WHERE r.code = 'MAINTAINER';
+
+-- ============================================================================
+-- 3.5 RAG 角色 → 权限（学生/教师/维修员 = chat 两项;
+--     实验室管理员/系统管理员 = 全 6 项）
+--     为什么在种子脚本而不只靠 V2/V3 迁移:
+--     Flyway 跑在 DataSeeder 之前, V2/V3 里的 INSERT...SELECT FROM tb_role
+--     执行时 tb_role 还是空表, 会产生 0 行(静默吞)。本脚本的角色此时已存在,
+--     INSERT IGNORE 保证重跑幂等。
+-- ============================================================================
+
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
+SELECT r.id, p.id
+FROM tb_role r
+JOIN tb_permission p ON p.code IN ('rag:chat:query', 'rag:chat:history')
+WHERE r.code IN ('STUDENT', 'TEACHER', 'MAINTAINER');
+
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
+SELECT r.id, p.id
+FROM tb_role r
+JOIN tb_permission p ON p.code IN (
+    'rag:chat:query', 'rag:chat:history',
+    'rag:doc:upload', 'rag:doc:list', 'rag:doc:reindex', 'rag:doc:delete'
+)
+WHERE r.code IN ('LAB_ADMIN', 'SYS_ADMIN');
 
 -- ============================================================================
 -- 4. 字典：实验类型 / 时段
