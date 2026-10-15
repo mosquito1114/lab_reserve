@@ -12,8 +12,11 @@ import com.labreserve.rag.model.dto.ReingestDTO;
 import com.labreserve.rag.model.entity.RagDocument;
 import com.labreserve.rag.pipeline.AbstractPipelineStep;
 import com.labreserve.rag.pipeline.ChunkStep;
+import com.labreserve.rag.pipeline.EmbedStep;
 import com.labreserve.rag.pipeline.ExtractStep;
+import com.labreserve.rag.pipeline.FinalizeStep;
 import com.labreserve.rag.pipeline.SanitizeStep;
+import com.labreserve.rag.pipeline.UpsertStep;
 import com.labreserve.rag.pipeline.StepContext;
 import com.labreserve.rag.service.RagDocumentService;
 import com.labreserve.rag.service.RagIngestDispatcher;
@@ -70,10 +73,15 @@ public class RagDocumentServiceImpl implements RagDocumentService {
     private final Map<StepCode, AbstractPipelineStep> stepRegistry = new HashMap<>();
 
     @Autowired
-    public RagDocumentServiceImpl(ExtractStep extractStep, SanitizeStep sanitizeStep, ChunkStep chunkStep) {
+    public RagDocumentServiceImpl(ExtractStep extractStep, SanitizeStep sanitizeStep,
+                                 ChunkStep chunkStep, EmbedStep embedStep,
+                                 UpsertStep upsertStep, FinalizeStep finalizeStep) {
         stepRegistry.put(StepCode.EXTRACT, extractStep);
         stepRegistry.put(StepCode.SANITIZE, sanitizeStep);
         stepRegistry.put(StepCode.CHUNK, chunkStep);
+        stepRegistry.put(StepCode.EMBED, embedStep);
+        stepRegistry.put(StepCode.UPSERT, upsertStep);
+        stepRegistry.put(StepCode.FINALIZE, finalizeStep);
         log.info("[RAG] 已注册 {} 个 Step Bean: {}", stepRegistry.size(), stepRegistry.keySet());
     }
 

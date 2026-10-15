@@ -4,10 +4,13 @@ import com.labreserve.common.constant.RedisKeyConst;
 import com.labreserve.rag.config.RagAsyncConfig;
 import com.labreserve.rag.pipeline.AbstractPipelineStep;
 import com.labreserve.rag.pipeline.ChunkStep;
+import com.labreserve.rag.pipeline.EmbedStep;
 import com.labreserve.rag.pipeline.ExtractStep;
+import com.labreserve.rag.pipeline.FinalizeStep;
 import com.labreserve.rag.pipeline.SanitizeStep;
 import com.labreserve.rag.pipeline.StepContext;
 import com.labreserve.rag.pipeline.TraceContext;
+import com.labreserve.rag.pipeline.UpsertStep;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
@@ -47,6 +50,15 @@ public class RagIngestDispatcher {
     private ChunkStep chunkStep;
 
     @Autowired
+    private EmbedStep embedStep;
+
+    @Autowired
+    private UpsertStep upsertStep;
+
+    @Autowired
+    private FinalizeStep finalizeStep;
+
+    @Autowired
     private TraceContext traceContext;
 
     /**
@@ -69,6 +81,12 @@ public class RagIngestDispatcher {
             log.info("[RAG] SANITIZE 完成 docId={}", documentId);
             chunkStep.execute(ctx);
             log.info("[RAG] CHUNK 完成 docId={} (状态机应到 CHUNKED)", documentId);
+            embedStep.execute(ctx);
+            log.info("[RAG] EMBED 完成 docId={} (状态机应到 EMBEDDED)", documentId);
+            upsertStep.execute(ctx);
+            log.info("[RAG] UPSERT 完成 docId={} (状态机应到 UPSERTED)", documentId);
+            finalizeStep.execute(ctx);
+            log.info("[RAG] FINALIZE 完成 docId={} (状态机应到 READY)", documentId);
         } catch (Exception e) {
             // 单步失败由 AbstractPipelineStep 已经写 FAILED + last_error_*
             // 这里只打最外层日志便于排查
