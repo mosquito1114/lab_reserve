@@ -36,8 +36,12 @@ public class RagChunk implements Serializable {
     /** RECURSIVE / QA / FIXED_OVERLAP / SEMANTIC */
     private String strategyCode;
 
-    /** Qdrant Point ID(R2 起写入) */
+    /** Qdrant Point ID（R2 起写入） */
     private String vectorRef;
+
+    /** EMBED Step 写入：raw float[vector-size] little-endian，
+     *  让 UPSERT 重跑可省 LLM 调用；R2 起写入 */
+    private byte[] vectorBlob;
 
     /** 数据库 DEFAULT CURRENT_TIMESTAMP 维护 */
     private LocalDateTime createdAt;

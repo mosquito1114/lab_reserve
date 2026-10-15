@@ -79,6 +79,9 @@ public class RagDocument implements Serializable {
 
     private Long uploadedBy;
 
+    /** Finalize Step 写入：表示文档正式可被 QUERY 检索的时刻 */
+    private LocalDateTime readyAt;
+
     /** 数据库 DEFAULT CURRENT_TIMESTAMP 维护 */
     private LocalDateTime createdAt;
 
