@@ -31,7 +31,7 @@ import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
-import org.springframework.security.access.prepost.PreAuthorize;
+import com.labreserve.security.RequirePerm;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -95,7 +95,7 @@ public class RagAdminController {
 
     @Operation(summary = "上传知识库文档（multipart）",
             description = "异步派发摄取链 (R1 截止到 CHUNK)；同 sha 已存在返回旧 ID 而不重传")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_UPLOAD + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_UPLOAD)
     @OpLog(module = OperationModule.RAG, type = OperationType.UPLOAD,
             content = "上传 RAG 文档")
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -112,7 +112,7 @@ public class RagAdminController {
     // --------------------------------------------------------------
 
     @Operation(summary = "文档详情")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_LIST + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_LIST)
     @PostMapping("/get")
     public Result<RagDocumentVO> get(@RequestBody @Valid IdDTO dto) {
         RagDocumentVO vo = toDocumentVO(ragDocumentService.getDocument(dto.getId()));
@@ -124,7 +124,7 @@ public class RagAdminController {
     // --------------------------------------------------------------
 
     @Operation(summary = "某文档全部步骤日志（按 ingestVersion）")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_LIST + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_LIST)
     @PostMapping("/list_steps")
     public Result<List<RagStepTimelineVO.StepEntry>> listSteps(@RequestBody @Valid IdDTO dto) {
         RagDocument doc = ragDocumentService.getDocument(dto.getId());
@@ -138,7 +138,7 @@ public class RagAdminController {
     // --------------------------------------------------------------
 
     @Operation(summary = "文档时间线（DAG）")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_LIST + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_LIST)
     @PostMapping("/timeline")
     public Result<RagStepTimelineVO> timeline(@RequestBody @Valid IdDTO dto) {
         RagDocument doc = ragDocumentService.getDocument(dto.getId());
@@ -157,7 +157,7 @@ public class RagAdminController {
     // --------------------------------------------------------------
 
     @Operation(summary = "文档切片明细（R1 用于核查 CHUNK 结果）")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_LIST + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_LIST)
     @PostMapping("/list_chunks")
     public Result<List<RagChunkVO>> listChunks(@RequestBody @Valid IdDTO dto) {
         RagDocument doc = ragDocumentService.getDocument(dto.getId());
@@ -185,7 +185,7 @@ public class RagAdminController {
 
     @Operation(summary = "手动重跑某 Step（失败后重试或全链前补充跑）",
             description = "会把 doc.pipepline_state 重置到该 Step 的 fromState，再调 Step.execute()")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_REINDEX + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_REINDEX)
     @OpLog(module = OperationModule.RAG, type = OperationType.UPDATE,
             content = "手动重跑 Step")
     @PostMapping("/run_step")
@@ -205,7 +205,7 @@ public class RagAdminController {
      * R1 仅作占位——直接返回 VOID + 后续完整跳步实现放 R5 RecoveryRunner 配套。
      */
     @Operation(summary = "跳过某 Step（仅做占位记录，R1 不真停）")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_REINDEX + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_REINDEX)
     @OpLog(module = OperationModule.RAG, type = OperationType.UPDATE,
             content = "跳过 Step")
     @PostMapping("/skip_step")
@@ -221,7 +221,7 @@ public class RagAdminController {
     // --------------------------------------------------------------
 
     @Operation(summary = "重建索引：ingestVersion +1、全链重跑")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_REINDEX + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_REINDEX)
     @OpLog(module = OperationModule.RAG, type = OperationType.UPDATE,
             content = "重建索引")
     @PostMapping("/reingest")
@@ -237,7 +237,7 @@ public class RagAdminController {
     // --------------------------------------------------------------
 
     @Operation(summary = "停用文档（业务维度）")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_DELETE + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_DELETE)
     @OpLog(module = OperationModule.RAG, type = OperationType.UPDATE,
             content = "停用文档")
     @PostMapping("/disable")
@@ -247,7 +247,7 @@ public class RagAdminController {
     }
 
     @Operation(summary = "启用文档（业务维度）")
-    @PreAuthorize("hasAuthority('" + PermissionConst.RAG_DOC_DELETE + "')")
+    @RequirePerm(PermissionConst.RAG_DOC_DELETE)
     @OpLog(module = OperationModule.RAG, type = OperationType.UPDATE,
             content = "启用文档")
     @PostMapping("/enable")
