@@ -1,6 +1,6 @@
 package com.labreserve.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
@@ -31,10 +31,10 @@ import org.springframework.util.StringUtils;
  */
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
 public class RedissonConfig {
 
-    @Autowired
-    private RedisProperties redisProperties;
+    private final RedisProperties redisProperties;
 
     @Bean(destroyMethod = "shutdown")
     public RedissonClient redissonClient() {

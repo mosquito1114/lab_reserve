@@ -37,19 +37,6 @@ public enum ResultCode {
      */
     CONFLICT(409, "业务冲突"),
 
-    /**
-     * 限流触发：单用户 30 req/min 或全局并发满（被服务端排队 30s 内未消化）。
-     * 前端拿到 429 后按 Retry-After 重试或提示用户「AI 正在繁忙」。
-     */
-    RAG_RATE_LIMIT(429, "AI 请求过于频繁，请稍后再试"),
-
-    /**
-     * RAG 服务降级：LLM / Qdrant / 整个 chat pipeline 不可用时。
-     * 由 {@code SafeStep} 抛 {@code RagUnavailableException}，前端拿到 503 后展示
-     * 「服务暂不可用」+ 给"再试一次"按钮。
-     */
-    RAG_UNAVAILABLE(503, "AI 服务暂不可用，请稍后再试"),
-
     /** 系统异常 */
     INTERNAL_ERROR(500, "系统异常，请稍后重试"),
     ;

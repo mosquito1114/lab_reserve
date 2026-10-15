@@ -1,6 +1,6 @@
 package com.labreserve.config;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
@@ -35,14 +35,13 @@ import javax.sql.DataSource;
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class DataSeeder implements ApplicationRunner {
 
     private static final String SEED_SCRIPT = "data/seed_data.sql";
 
-    @Autowired
-    private DataSource dataSource;
-    @Autowired
-    private JdbcTemplate jdbcTemplate;
+    private final DataSource dataSource;
+    private final JdbcTemplate jdbcTemplate;
 
     @Value("${lab-reserve.seed.enabled:true}")
     private boolean enabled;

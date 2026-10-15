@@ -37,7 +37,7 @@ public class Knife4jConfig {
                                 - 认证：请求头 `Authorization: Bearer <accessToken>`
                                 - 业务冲突统一返回 409，前端针对「提交预约 / 加入排队 / 候补确认」做特殊弹窗
                                 """)
-                        .version("v0.2.0")
+                        .version("v0.1.0")
                         .contact(new Contact().name("lab_reserve")))
                 .components(new Components()
                         .addSecuritySchemes(SECURITY_SCHEME_NAME, new SecurityScheme()
@@ -66,16 +66,6 @@ public class Knife4jConfig {
                 .group("02-认证")
                 .displayName("02-认证")
                 .pathsToMatch("/api/auth/**")
-                .build();
-    }
-
-    /** 系统管理模块：角色权限、操作日志 */
-    @Bean
-    public GroupedOpenApi systemManageApi() {
-        return GroupedOpenApi.builder()
-                .group("03-系统管理")
-                .displayName("03-系统管理")
-                .pathsToMatch("/api/role/**", "/api/permission/**", "/api/operation_log/**")
                 .build();
     }
 

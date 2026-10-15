@@ -128,22 +128,6 @@ public final class RedisKeyConst {
     public static final String STAT_OCCUPANCY = PREFIX + "stat:occupancy:";
 
     // ============================================================
-    // RAG（智能问答）
-    // ============================================================
-
-    /** 每用户限速：{@code lab:reserve:rag:rl:user:{userId}} */
-    public static final String RAG_RL_USER = PREFIX + "rag:rl:user:";
-
-    /** 全局并发信号量：{@code lab:reserve:rag:sem:global} */
-    public static final String RAG_SEM_GLOBAL = PREFIX + "rag:sem:global";
-
-    /** 等待队列（ZSet）{@code lab:reserve:rag:queue:wait}，score = role_priority*1e9 - ts */
-    public static final String RAG_QUEUE_WAIT = PREFIX + "rag:queue:wait";
-
-    /** 摄取步骤锁：{@code lab:reserve:rag:step:{docId}:{ver}:{code}} */
-    public static final String RAG_STEP_LOCK = PREFIX + "rag:step:";
-
-    // ============================================================
     // Key 构造方法
     // ============================================================
 
@@ -195,19 +179,5 @@ public final class RedisKeyConst {
     /** {@code lab:reserve:perm:role:{roleId}} */
     public static String permRoleKey(Long roleId) {
         return PERM_ROLE + roleId;
-    }
-
-    // ------------------------------------------------------------
-    // RAG（迭代 R0 起）
-    // ------------------------------------------------------------
-
-    /** {@code lab:reserve:rag:rl:user:{userId}} */
-    public static String ragRateLimitKey(Long userId) {
-        return RAG_RL_USER + userId;
-    }
-
-    /** {@code lab:reserve:rag:step:{docId}:{ver}:{stepCode}} */
-    public static String ragStepLockKey(Long documentId, Integer version, String stepCode) {
-        return RAG_STEP_LOCK + documentId + ":" + version + ":" + stepCode;
     }
 }
