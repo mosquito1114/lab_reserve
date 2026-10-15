@@ -17,6 +17,58 @@ set -uo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
+# ------------------------------------------------------------
+# JDK 17+ 环境探测
+#
+# 本项目要求 JDK 17，但 Windows 默认 PATH 通常把 JDK 1.8 (java.exe) 排最前，
+# 会导致 dev.sh / ./mvnw 调起 javac 时拿到的是 JDK 1.8，引发大量编译失败
+# （record / switch 表达式 / var 等都不支持）。
+#
+# 探测顺序：
+#   1) 若用户已经显式设置 JAVA_HOME 且版本≥17，直接用
+#   2) 否则从常见安装位置依次找 jdk-17 / jdk-21 / jdk-22
+#   3) 找不到则退出并给出明确指引
+# ------------------------------------------------------------
+ensure_jdk17() {
+    if [[ -n "${JAVA_HOME:-}" ]]; then
+        if [[ -x "$JAVA_HOME/bin/java.exe" || -x "$JAVA_HOME/bin/java" ]]; then
+            local current_ver
+            current_ver=$("$JAVA_HOME/bin/java" -version 2>&1 | head -1 | awk -F '"' '{print $2}')
+            if [[ "$current_ver" =~ ^(17|18|19|20|21|22|23|24|25)\. ]]; then
+                export PATH="$JAVA_HOME/bin:$PATH"
+                return 0
+            fi
+            warn "JAVA_HOME=$JAVA_HOME 但版本是 $current_ver，需要 JDK 17+；继续探测"
+        fi
+    fi
+
+    # Git Bash 上常见路径（/d、/c 前缀）
+    local candidates=(
+        "/d/Java/jdk-17" "/d/Java/jdk-21" "/d/Java/jdk-22"
+        "/c/Java/jdk-17" "/c/Java/jdk-21"
+        "/d/jdk-17"      "/d/jdk-21"
+        "/c/Program Files/Java/jdk-17" "/c/Program Files/Java/jdk-21"
+    )
+    local p
+    for p in "${candidates[@]}"; do
+        if [[ -x "$p/bin/java.exe" || -x "$p/bin/java" ]]; then
+            local v
+            v=$("$p/bin/java" -version 2>&1 | head -1 | awk -F '"' '{print $2}')
+            if [[ "$v" =~ ^(17|18|19|20|21|22|23|24|25)\. ]]; then
+                export JAVA_HOME="$p"
+                export PATH="$JAVA_HOME/bin:$PATH"
+                info "自动选择 JDK: $JAVA_HOME ($v)"
+                return 0
+            fi
+        fi
+    done
+
+    err "找不到 JDK 17+。请："
+    err "  1) 下载 JDK 17: https://adoptium.net/  2) 安装后设置 JAVA_HOME 指向安装路径"
+    err "  2) 或在 PowerShell: [System.Environment]::SetEnvironmentVariable('JAVA_HOME','D:\\Java\\jdk-17','User')"
+    exit 1
+}
+
 LOG_DIR="$ROOT_DIR/logs"
 RUN_DIR="$ROOT_DIR/.dev"
 BACKEND_LOG="$LOG_DIR/dev-backend.log"
@@ -26,6 +78,7 @@ FRONTEND_PID_FILE="$RUN_DIR/frontend.pid"
 
 MYSQL_CONTAINER="lab-reserve-mysql"
 REDIS_CONTAINER="lab-reserve-redis"
+QDRANT_CONTAINER="lab-reserve-qdrant"
 
 # 注意：不要叫 FRONTEND_PORT —— .env 里也有同名变量（nginx 容器的 80），
 # source .env 会把它覆盖掉，所以这里用 DEV_ 前缀区分。
@@ -37,6 +90,9 @@ info()  { printf '\033[36m[dev]\033[0m %s\n' "$*"; }
 ok()    { printf '\033[32m[ ok]\033[0m %s\n' "$*"; }
 warn()  { printf '\033[33m[warn]\033[0m %s\n' "$*"; }
 err()   { printf '\033[31m[fail]\033[0m %s\n' "$*" >&2; }
+
+# JDK 探测（必须在 info/warn/err 函数定义之后调用）
+ensure_jdk17
 
 # ---------- 基础 ----------
 load_env() {
@@ -96,14 +152,15 @@ port_in_use() { # $1 = 端口
 }
 
 start_db() {
-    info "启动 MySQL + Redis 容器…"
-    docker compose up -d mysql redis >/dev/null
+    info "启动 MySQL + Redis + Qdrant 容器…"
+    docker compose up -d mysql redis qdrant >/dev/null
     for _ in $(seq 1 40); do
-        local mysql redis
+        local mysql redis qdrant
         mysql="$(docker inspect -f '{{.State.Health.Status}}' "$MYSQL_CONTAINER" 2>/dev/null || echo missing)"
         redis="$(docker inspect -f '{{.State.Health.Status}}' "$REDIS_CONTAINER" 2>/dev/null || echo missing)"
+        qdrant="$(docker inspect -f '{{.State.Health.Status}}' "$QDRANT_CONTAINER" 2>/dev/null || echo missing)"
         if [[ "$mysql" == "healthy" && "$redis" == "healthy" ]]; then
-            ok "MySQL / Redis 均已 healthy"
+            ok "MySQL / Redis 均已 healthy（qdrant=$qdrant，RAG_ENABLED=false 时不需要它 healthy）"
             return 0
         fi
         sleep 2
@@ -204,7 +261,7 @@ cmd_restart() {
 cmd_down() {
     cmd_stop
     info "停止数据库容器…"
-    docker compose stop mysql redis >/dev/null 2>&1 || true
+    docker compose stop mysql redis qdrant >/dev/null 2>&1 || true
     ok "数据库容器已停止（数据卷保留；彻底重置用 docker compose down -v）"
 }
 
@@ -229,10 +286,10 @@ cmd_status() {
         err "前端：未运行"
     fi
 
-    for c in "$MYSQL_CONTAINER" "$REDIS_CONTAINER"; do
+    for c in "$MYSQL_CONTAINER" "$REDIS_CONTAINER" "$QDRANT_CONTAINER"; do
         local st
         st="$(docker inspect -f '{{.State.Health.Status}}' "$c" 2>/dev/null || echo missing)"
-        if [[ "$st" == "healthy" ]]; then ok "${c}：${st}"; else err "${c}：${st}"; fi
+        if [[ "$st" == "healthy" ]]; then ok "${c}：${st}"; else warn "${c}：${st}"; fi
     done
     echo
     echo "日志：logs/dev-backend.log · logs/dev-frontend.log"
