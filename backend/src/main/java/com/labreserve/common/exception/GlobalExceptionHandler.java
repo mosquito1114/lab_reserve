@@ -122,6 +122,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Result.fail(ResultCode.FORBIDDEN));
     }
 
+    /**
+     * RAG 服务不可用（外部依赖 LLM / Qdrant / pipeline 整链降级后仍失败）。
+     * 翻译为 503 + {@link ResultCode#RAG_UNAVAILABLE}。
+     */
+    @ExceptionHandler(com.labreserve.rag.exception.RagUnavailableException.class)
+    public ResponseEntity<Result<Object>> handleRagUnavailable(com.labreserve.rag.exception.RagUnavailableException ex) {
+        log.error("[RAG] 服务不可用: {}", ex.getMessage(), ex);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Result.fail(ResultCode.RAG_UNAVAILABLE));
+    }
+
     // ------------------------------------------------------------
     // 数据层兜底
     // ------------------------------------------------------------

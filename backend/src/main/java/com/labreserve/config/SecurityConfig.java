@@ -1,5 +1,9 @@
 package com.labreserve.config;
 
+import com.labreserve.security.JwtAuthenticationFilter;
+import com.labreserve.security.RestAccessDeniedHandler;
+import com.labreserve.security.RestAuthenticationEntryPoint;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -10,30 +14,36 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * Spring Security 配置。
  *
- * <p><b>⚠️ 当前是迭代 0 的临时配置：全部放行。</b>
- * 这样做是为了让骨架先跑起来（健康检查、Knife4j 能访问）。
+ * <p>前后端分离 + JWT，因此：关闭 CSRF / Session / 表单登录，
+ * 由 {@link JwtAuthenticationFilter} 从请求头还原登录态，
+ * 其余请求一律要求已认证（{@code authenticated()}）。
  *
- * <p>迭代 1 会改成：
- * <ul>
- *   <li>注册 {@code JwtAuthenticationFilter}（在 {@code UsernamePasswordAuthenticationFilter} 之前）</li>
- *   <li>白名单只留 {@code /api/auth/login}、{@code /api/auth/refresh}、{@code /api/system/health}、Knife4j 相关路径</li>
- *   <li>其余请求 {@code authenticated()}</li>
- *   <li>自定义 {@code AuthenticationEntryPoint}（401）与 {@code AccessDeniedHandler}（403），
- *       统一返回 {@code Result} 格式</li>
- * </ul>
+ * <p>功能级权限不在这里做（URL 维度太粗），而是由
+ * {@code @RequirePerm} + {@link com.labreserve.security.PermissionAspect} 在方法上校验，
+ * 权限本身是数据（{@code tb_role_permission}），管理员可在界面上勾选。
  */
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    /** 迭代 0 阶段完全放行，迭代 1 收紧 */
+    /**
+     * 免登录路径。
+     *
+     * <p>只放「拿不到 token 也必须能访问」的接口：登录、刷新、健康检查、接口文档。
+     * 注意 {@code /api/auth/logout}、{@code /api/auth/get_info} 需要登录，不在这里。
+     */
     private static final String[] PERMIT_ALL = {
-            "/api/**",
+            "/api/auth/login",
+            "/api/auth/refresh",
+            "/api/system/health",
+            // R0 骨架阶段：RAG 健康检查免登录，便于前端/探针免认证拉取
+            "/api/rag/health",
             "/doc.html",
             "/webjars/**",
             "/v3/api-docs/**",
@@ -42,6 +52,13 @@ public class SecurityConfig {
             "/favicon.ico",
             "/error"
     };
+
+    @Autowired
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
+    @Autowired
+    private RestAuthenticationEntryPoint authenticationEntryPoint;
+    @Autowired
+    private RestAccessDeniedHandler accessDeniedHandler;
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
@@ -54,8 +71,14 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable)
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // TODO 迭代 1：替换为 JWT 过滤器 + 按权限收紧
-                .authorizeHttpRequests(registry -> registry.anyRequest().permitAll());
+                // 401 / 403 统一返回 Result JSON（默认实现会返回 HTML）
+                .exceptionHandling(handling -> handling
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
+                .authorizeHttpRequests(registry -> registry
+                        .requestMatchers(PERMIT_ALL).permitAll()
+                        .anyRequest().authenticated())
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

@@ -1,12 +1,12 @@
 <template>
   <div class="page-container dashboard">
     <el-alert
-      v-if="!userStore.isLogin"
+      v-if="userStore.isLogin"
       class="mb-16"
-      type="info"
+      type="success"
       :closable="false"
-      title="当前未登录"
-      description="骨架阶段（迭代 0）登录功能尚未接入，迭代 1 会实现 JWT 登录与精简 RBAC 权限控制。"
+      :title="`欢迎回来，${userStore.realName}（${userStore.roleName}）`"
+      :description="`当前角色拥有 ${userStore.permissions.length} 项权限，左侧菜单按权限展示。`"
       show-icon
     />
 

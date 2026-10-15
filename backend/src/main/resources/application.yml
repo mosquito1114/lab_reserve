@@ -135,7 +135,7 @@ aliyun:
 # 业务参数（对应 agents/req.md 的问答结论）
 # ============================================================
 lab-reserve:
-  version: 0.1.0
+  version: 0.2.0
   jwt:
     secret: ${JWT_SECRET:lab-reserve-default-secret-please-change-me-in-env-file}
     access-expire-seconds: ${JWT_ACCESS_EXPIRE:7200}
@@ -155,6 +155,54 @@ lab-reserve:
   sensitive:
     # 允许查看完整手机号的角色（脱敏例外，必须写操作日志）
     reveal-roles: SYS_ADMIN,LAB_ADMIN
+  rag:
+    # 【默认关闭】只有显式设置 RAG_ENABLED=true 且下游凭据齐全时才启用
+    enabled: ${RAG_ENABLED:false}
+    # 当 enabled=false 时, SpringAIConfig / QdrantConfig 不会创建 Bean，启动期不调任何外部接口
+    # 下面的子块仅在 enabled=true 时才被注入
+    ingest:
+      max-file-mb: 50
+      chunk-default: RECURSIVE           # RECURSIVE / QA / FIXED_OVERLAP（与 LangChain/LlamaIndex 对齐）
+      chunk-max-chars: 500
+      chunk-overlap: 100
+      embed-batch-size: 16
+      retry-attempts: 3
+      retry-backoff-ms: 1000
+    chat:
+      rate-limit-per-user-per-min: 30
+      global-concurrency: 16
+      queue-wait-timeout-ms: 30000
+      max-context-tokens: 8000
+      history-window: 6
+      tool-max-loops: 5
+    rewrite:
+      enabled: true
+      timeout-sec: 15
+    rerank:
+      enabled: false
+      top-k-in: 12
+      top-k-out: 5
+    prompt:
+      system:  classpath:prompt/rag-system.md
+      rewrite: classpath:prompt/rewrite.md
+      intent:  classpath:prompt/intent.md
+      answer:  classpath:prompt/answer.md
+
+# ============================================================
+# Spring AI（客户端配置：仅在 lab-reserve.rag.enabled=true 时被 SpringAIConfig 读取）
+# ============================================================
+spring.ai:
+  openai:
+    base-url: ${LLM_BASE_URL:https://api.deepseek.com/v1}
+    api-key:  ${LLM_API_KEY:}
+    chat:
+      options:
+        model: ${LLM_CHAT_MODEL:deepseek-chat}
+        max-tokens: 2000
+        temperature: 0.2
+    embedding:
+      options:
+        model: ${LLM_EMBEDDING_MODEL:text-embedding-v3}
 
 # ============================================================
 # 接口文档
