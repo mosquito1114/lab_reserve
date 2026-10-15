@@ -72,13 +72,15 @@ spring:
     encoding: UTF-8
 
   # ------------------------------------------------------------
-  # 文件上传（故障截图，后端中转后转存 OSS）
+  # 文件上传（故障截图 + RAG 文档上传共享 multipart 限制）
   # ------------------------------------------------------------
   servlet:
     multipart:
       enabled: true
-      max-file-size: 5MB
-      max-request-size: 25MB
+      # RAG 摄取（lab-reserve.rag.ingest.max-file-mb）默认 50 MB,
+      # 这里上限设 60 MB, 给 multipart 边界 (boundary + 字段) 留 buffer
+      max-file-size: 60MB
+      max-request-size: 80MB
 
   # ------------------------------------------------------------
   # SMTP 邮件（迭代 3 使用）
