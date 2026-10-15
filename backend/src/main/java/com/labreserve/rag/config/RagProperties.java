@@ -48,6 +48,13 @@ public class RagProperties {
     /** 提示词文件位置（R5 启用） */
     private Prompt prompt = new Prompt();
 
+    /**
+     * LLM 客户端配置 (R2 起, 供 {@code DashScopeEmbeddingClient} 用).
+     * 聊天仍走 Spring AI {@code spring.ai.openai.*}; embedding 因为 Spring AI 1.0 GA
+     * 与 DashScope OpenAI-兼容模式有 content-type 兼容问题, 走自家 HTTP 客户端.
+     */
+    private Llm llm = new Llm();
+
     // ------------------------------------------------------------
 
     @Getter
@@ -116,5 +123,22 @@ public class RagProperties {
         private String rewrite;
         private String intent;
         private String answer;
+    }
+
+    @Getter
+    @Setter
+    public static class Llm {
+        /** 供应商标识（注释用, 不参与代码逻辑） */
+        private String provider = "tongyi";
+        /** OpenAI-兼容 API 基础 URL */
+        private String baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+        /** API key */
+        private String apiKey = "";
+        /** 聊天模型名（R3 ChatModel 用 spring.ai.openai.chat.options.model, 不走这里） */
+        private String chatModel = "qwen-plus";
+        /** Embedding 模型名 */
+        private String embeddingModel = "text-embedding-v3";
+        /** HTTP 超时（秒） */
+        private int timeoutSeconds = 30;
     }
 }

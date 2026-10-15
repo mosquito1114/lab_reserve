@@ -1,6 +1,7 @@
 package com.labreserve.rag.pipeline;
 
 import com.labreserve.common.exception.BizException;
+import com.labreserve.rag.adapter.DashScopeEmbeddingClient;
 import com.labreserve.rag.config.RagProperties;
 import com.labreserve.rag.enums.RagPipelineState;
 import com.labreserve.rag.enums.StepCode;
@@ -8,7 +9,6 @@ import com.labreserve.rag.mapper.RagChunkMapper;
 import com.labreserve.rag.model.entity.RagChunk;
 import com.labreserve.rag.model.entity.RagDocument;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -51,7 +51,7 @@ public class EmbedStep extends AbstractPipelineStep {
     private RagProperties props;
 
     @Autowired
-    private EmbeddingModel embeddingModel;
+    private DashScopeEmbeddingClient embeddingClient;
 
     @Autowired
     private RagChunkMapper chunkMapper;
@@ -115,7 +115,7 @@ public class EmbedStep extends AbstractPipelineStep {
             }
             log.info("[RAG][EMBED] 批嵌入 docId={} batch {}-{} size={} (待嵌入={} 已嵌入={})",
                     doc.getId(), i, end, batch.size(), toEmbed.size(), batch.size() - toEmbed.size());
-            List<float[]> embeddings = embeddingModel.embed(toEmbed);
+            List<float[]> embeddings = embeddingClient.embed(toEmbed);
             if (embeddings == null || embeddings.size() != toEmbed.size()) {
                 throw new BizException(500,
                         "EMBED 调用结果数量(" + (embeddings == null ? 0 : embeddings.size())

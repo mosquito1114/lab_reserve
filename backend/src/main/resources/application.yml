@@ -162,6 +162,13 @@ lab-reserve:
     enabled: ${RAG_ENABLED:false}
     # 当 enabled=false 时, SpringAIConfig / QdrantConfig 不会创建 Bean，启动期不调任何外部接口
     # 下面的子块仅在 enabled=true 时才被注入
+    llm:
+      # RAG 自家 Embedding 客户端 (DashScopeHttpEmbeddingClient) 用这个块;
+      # 聊天 ChatModel 仍走 spring.ai.openai.* 启 Spring AI ChatClient
+      base-url:        ${LLM_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key:         ${LLM_API_KEY:}
+      embedding-model: ${LLM_EMBEDDING_MODEL:text-embedding-v3}
+      timeout-seconds: 30
     ingest:
       max-file-mb: 50
       chunk-default: RECURSIVE           # RECURSIVE / QA / FIXED_OVERLAP（与 LangChain/LlamaIndex 对齐）
