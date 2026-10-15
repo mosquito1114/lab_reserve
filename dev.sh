@@ -195,6 +195,14 @@ start_backend() {
     info "启动后端：./mvnw spring-boot:run（日志 → logs/dev-backend.log）"
     (
         cd "$ROOT_DIR/backend" || exit 1
+        # 先跑一次编译,保证 target/classes 与源码一致
+        # (spring-boot:run 自身的增量编译 + classworlds 多次 restart 后会清理
+        #  target/classes 但还可能 fork 出一个挂着旧 classpath 的子进程)
+        ./mvnw -q -DskipTests compile >/dev/null 2>&1 || {
+            err "后端预编译失败，看 logs/dev-backend.log"
+            tail -50 "$BACKEND_LOG" 2>/dev/null
+            return 1
+        }
         nohup ./mvnw -q -DskipTests spring-boot:run >"$BACKEND_LOG" 2>&1 &
         echo $! >"$BACKEND_PID_FILE"
     )
