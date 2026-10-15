@@ -42,6 +42,8 @@ public class SecurityConfig {
             "/api/auth/login",
             "/api/auth/refresh",
             "/api/system/health",
+            // R0 骨架阶段：RAG 健康检查免登录，便于前端/探针免认证拉取
+            "/api/rag/health",
             "/doc.html",
             "/webjars/**",
             "/v3/api-docs/**",
