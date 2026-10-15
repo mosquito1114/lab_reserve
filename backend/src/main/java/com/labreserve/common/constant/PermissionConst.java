@@ -106,6 +106,22 @@ public final class PermissionConst {
     public static final String SYSTEM_LOG_LIST = "system:log:list";
     public static final String SYSTEM_LOG_EXPORT = "system:log:export";
 
+    // ------------------------------------------------------------
+    // RAG（智能问答）—— R0 骨架阶段上线
+    // ------------------------------------------------------------
+    /** 发起 RAG 提问（POST /api/rag/chat/send）—— 5 角色全开 */
+    public static final String RAG_CHAT_QUERY = "rag:chat:query";
+    /** 查看自己的会话与消息历史 */
+    public static final String RAG_CHAT_HISTORY = "rag:chat:history";
+    /** 上传知识库文档 */
+    public static final String RAG_DOC_UPLOAD = "rag:doc:upload";
+    /** 文档列表 / 详情 / 元数据 */
+    public static final String RAG_DOC_LIST = "rag:doc:list";
+    /** 重建文档摄取链路 / 修改切片策略 */
+    public static final String RAG_DOC_REINDEX = "rag:doc:reindex";
+    /** 停用 / 启用 / 删除文档 */
+    public static final String RAG_DOC_DELETE = "rag:doc:delete";
+
     /** 防锁死：任何情况下都不允许从 {@code SYS_ADMIN} 移除这个权限 */
     public static final String CRITICAL_PERMISSION = SYSTEM_ROLE_UPDATE;
 
