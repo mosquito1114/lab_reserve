@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.labreserve.rag.model.entity.RagPipelineStep;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
@@ -18,11 +19,15 @@ import java.util.List;
 public interface RagPipelineStepMapper extends BaseMapper<RagPipelineStep> {
 
     /** 找当前文档某 version 最近 6 步(详情页用) */
+    @Select("SELECT * FROM tb_rag_pipeline_step WHERE document_id = #{documentId} " +
+            "AND ingest_version = #{ingestVersion} ORDER BY id DESC LIMIT #{limit}")
     List<RagPipelineStep> listRecentByDocVersion(@Param("documentId") Long documentId,
                                                  @Param("ingestVersion") Integer ingestVersion,
                                                  @Param("limit") int limit);
 
     /** 找当前文档某 version 全部 step(按时间正序) */
+    @Select("SELECT * FROM tb_rag_pipeline_step WHERE document_id = #{documentId} " +
+            "AND ingest_version = #{ingestVersion} ORDER BY id ASC")
     List<RagPipelineStep> listByDocVersion(@Param("documentId") Long documentId,
                                           @Param("ingestVersion") Integer ingestVersion);
 

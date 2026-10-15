@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.labreserve.rag.model.entity.RagDocument;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 /**
@@ -16,6 +17,7 @@ import org.apache.ibatis.annotations.Update;
 public interface RagDocumentMapper extends BaseMapper<RagDocument> {
 
     /** 按 sha 查已存在文档（幂等保护;同 sha 上传返回已存在 ID） */
+    @Select("SELECT * FROM tb_rag_document WHERE content_sha256 = #{sha256} LIMIT 1")
     RagDocument findBySha(@Param("sha256") String sha256);
 
     /**

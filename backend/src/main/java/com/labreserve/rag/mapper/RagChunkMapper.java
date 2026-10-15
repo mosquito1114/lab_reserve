@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.labreserve.rag.model.entity.RagChunk;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
@@ -18,6 +19,8 @@ import java.util.List;
 public interface RagChunkMapper extends BaseMapper<RagChunk> {
 
     /** 按 (docId, version) 取所有切片(用于引用追溯 / 调试) */
+    @Select("SELECT * FROM tb_rag_chunk WHERE document_id = #{documentId} " +
+            "AND ingest_version = #{ingestVersion} ORDER BY chunk_index ASC")
     List<RagChunk> listByDocVersion(@Param("documentId") Long documentId,
                                     @Param("ingestVersion") Integer ingestVersion);
 
