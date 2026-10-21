@@ -153,25 +153,23 @@ JOIN tb_permission p ON p.code IN (
 )
 WHERE r.code = 'SYS_ADMIN';
 
--- 实验室管理员：资源维护 + 预约审批 + 派单验收（注意：没有 user:create，落实需求 Q32）
+-- 实验室管理员：只管「实验室资源 + 审批调度 + 报修验收」
+-- 不给他用户管理、班级维护、操作日志（需求变更 2：管理员类权限收窄到本职）
 INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
-    'user:list', 'user:view', 'user:view-phone',
     'resource:lab:list', 'resource:lab:create', 'resource:lab:update', 'resource:lab:disable',
     'resource:equip:list', 'resource:equip:create', 'resource:equip:update', 'resource:equip:disable',
     'resource:log:list',
     'dict:list', 'dict:manage',
-    'class:list', 'class:manage',
     'reservation:list', 'reservation:list-all', 'reservation:view',
     'reservation:audit', 'reservation:release',
     'change:list', 'change:audit',
     'queue:list-all',
     'repair:create', 'repair:list', 'repair:review', 'repair:assign', 'repair:accept',
-    'message:list', 'message:delivery-log',
-    'stat:view', 'stat:export',
-    'system:log:list'
+    'message:list',
+    'stat:view', 'stat:export'
 )
 WHERE r.code = 'LAB_ADMIN';
 

@@ -154,7 +154,8 @@ lab-reserve:
     max-retry: 3
   sensitive:
     # 允许查看完整手机号的角色（脱敏例外，必须写操作日志）
-    reveal-roles: SYS_ADMIN,LAB_ADMIN
+    # 需求变更 2：LAB_ADMIN 不再具备 user:view-phone，脱敏例外只剩系统管理员
+    reveal-roles: SYS_ADMIN
   rag:
     # 【默认关闭】只有显式设置 RAG_ENABLED=true 且下游凭据齐全时才启用
     enabled: ${RAG_ENABLED:false}
