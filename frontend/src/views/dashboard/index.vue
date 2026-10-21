@@ -1,7 +1,6 @@
 <template>
   <div class="page-container dashboard">
     <el-alert
-      v-if="userStore.isLogin"
       class="mb-16"
       type="success"
       :closable="false"
@@ -10,114 +9,140 @@
       show-icon
     />
 
-    <!-- ---------- 系统健康状态 ---------- -->
-    <el-card shadow="never" class="mb-16">
-      <template #header>
-        <div class="card-header">
-          <span>系统状态</span>
-          <el-button text :icon="Refresh" :loading="loading" @click="loadHealth">刷新</el-button>
-        </div>
-      </template>
-
-      <el-row :gutter="16">
-        <el-col :xs="24" :sm="12" :md="6">
-          <div class="stat">
-            <div class="stat-label">后端服务</div>
-            <div class="stat-value">
-              <el-tag :type="overallType" size="large" effect="dark">{{ health?.status ?? '未知' }}</el-tag>
+    <el-row :gutter="16">
+      <!-- ---------- 系统运行状态：只有系统管理员可见 ---------- -->
+      <el-col v-if="canMonitor" :xs="24" :md="16">
+        <el-card v-loading="loading" shadow="never" class="mb-16">
+          <template #header>
+            <div class="card-header">
+              <span>系统运行状态</span>
+              <el-button text :icon="Refresh" :loading="loading" @click="loadMonitor">刷新</el-button>
             </div>
-          </div>
-        </el-col>
-        <el-col :xs="24" :sm="12" :md="6">
-          <div class="stat">
-            <div class="stat-label">MySQL</div>
-            <div class="stat-value">
-              <el-tag :type="health?.database === 'UP' ? 'success' : 'danger'" size="large">
-                {{ health?.database ?? '未知' }}
-              </el-tag>
+          </template>
+
+          <el-row :gutter="16">
+            <el-col :xs="24" :sm="12" :md="6">
+              <div class="stat">
+                <div class="stat-label">后端服务</div>
+                <div class="stat-value">
+                  <el-tag :type="overallType" size="large" effect="dark">{{ monitor?.status ?? '未知' }}</el-tag>
+                </div>
+              </div>
+            </el-col>
+            <el-col :xs="24" :sm="12" :md="6">
+              <div class="stat">
+                <div class="stat-label">MySQL</div>
+                <div class="stat-value">
+                  <el-tag :type="monitor?.database === 'UP' ? 'success' : 'danger'" size="large" effect="dark">
+                    {{ monitor?.database ?? '未知' }}
+                  </el-tag>
+                </div>
+              </div>
+            </el-col>
+            <el-col :xs="24" :sm="12" :md="6">
+              <div class="stat">
+                <div class="stat-label">Redis</div>
+                <div class="stat-value">
+                  <el-tag :type="monitor?.redis === 'UP' ? 'success' : 'danger'" size="large" effect="dark">
+                    {{ monitor?.redis ?? '未知' }}
+                  </el-tag>
+                </div>
+              </div>
+            </el-col>
+            <el-col :xs="24" :sm="12" :md="6">
+              <div class="stat">
+                <div class="stat-label">运行时长</div>
+                <div class="stat-value stat-value--text">{{ uptimeText }}</div>
+              </div>
+            </el-col>
+          </el-row>
+
+          <el-descriptions v-if="monitor" class="mt-16" :column="2" border size="small">
+            <el-descriptions-item label="应用名">{{ monitor.application }}</el-descriptions-item>
+            <el-descriptions-item label="版本">{{ monitor.version }}</el-descriptions-item>
+            <el-descriptions-item label="激活配置">{{ monitor.profiles || '（默认）' }}</el-descriptions-item>
+            <el-descriptions-item label="服务器时间">{{ monitor.serverTime }}</el-descriptions-item>
+          </el-descriptions>
+
+          <el-alert
+            v-if="monitorError"
+            class="mt-16"
+            type="error"
+            :closable="false"
+            :title="monitorError"
+            show-icon
+          />
+        </el-card>
+      </el-col>
+
+      <!-- ---------- 我的账号 ---------- -->
+      <el-col :xs="24" :md="canMonitor ? 8 : 24">
+        <el-card shadow="never" class="mb-16">
+          <template #header>
+            <div class="card-header">
+              <span>我的账号</span>
+              <el-button text type="primary" @click="router.push('/profile')">个人中心</el-button>
             </div>
-          </div>
-        </el-col>
-        <el-col :xs="24" :sm="12" :md="6">
-          <div class="stat">
-            <div class="stat-label">Redis</div>
-            <div class="stat-value">
-              <el-tag :type="health?.redis === 'UP' ? 'success' : 'danger'" size="large">
-                {{ health?.redis ?? '未知' }}
-              </el-tag>
-            </div>
-          </div>
-        </el-col>
-        <el-col :xs="24" :sm="12" :md="6">
-          <div class="stat">
-            <div class="stat-label">运行时长</div>
-            <div class="stat-value stat-value--text">{{ uptimeText }}</div>
-          </div>
-        </el-col>
-      </el-row>
+          </template>
 
-      <el-descriptions v-if="health" class="mt-16" :column="2" border size="small">
-        <el-descriptions-item label="应用名">{{ health.application }}</el-descriptions-item>
-        <el-descriptions-item label="版本">{{ health.version }}</el-descriptions-item>
-        <el-descriptions-item label="激活配置">{{ health.profiles || '（默认）' }}</el-descriptions-item>
-        <el-descriptions-item label="服务器时间">{{ health.serverTime }}</el-descriptions-item>
-      </el-descriptions>
+          <el-descriptions :column="1" border size="small">
+            <el-descriptions-item label="账号">{{ userStore.userInfo?.username }}</el-descriptions-item>
+            <el-descriptions-item label="姓名">{{ userStore.realName }}</el-descriptions-item>
+            <el-descriptions-item label="角色">{{ userStore.roleName }}</el-descriptions-item>
+            <el-descriptions-item label="手机号">{{ userStore.userInfo?.phone || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="邮箱">{{ userStore.userInfo?.email || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="邮件通知">
+              {{ userStore.userInfo?.notifyEmail === 1 ? '已开启' : '未开启' }}
+            </el-descriptions-item>
+          </el-descriptions>
+        </el-card>
+      </el-col>
+    </el-row>
 
-      <el-alert
-        v-if="healthError"
-        class="mt-16"
-        type="error"
-        :closable="false"
-        :title="healthError"
-        show-icon
-      />
-    </el-card>
-
-    <!-- ---------- 项目骨架进度 ---------- -->
+    <!-- ---------- 快捷入口：按当前角色可见的菜单生成 ---------- -->
     <el-card shadow="never">
       <template #header>
-        <span>项目骨架（迭代 0）</span>
+        <span>快捷入口</span>
       </template>
-
-      <el-descriptions :column="1" border size="small">
-        <el-descriptions-item
-          v-for="item in skeletonItems"
-          :key="item.label"
-          :label="item.label"
-        >
-          <span :class="item.done ? 'text-secondary' : 'text-danger'">
-            {{ item.done ? '✅ ' : '⏳ ' }}{{ item.value }}
-          </span>
-        </el-descriptions-item>
-      </el-descriptions>
-
-      <el-divider content-position="left">后续迭代</el-divider>
       <el-space wrap>
-        <el-tag v-for="m in upcoming" :key="m" type="info" effect="plain">{{ m }}</el-tag>
+        <el-button
+          v-for="item in shortcuts"
+          :key="item.path"
+          plain
+          @click="router.push(item.path)"
+        >
+          {{ item.title }}
+        </el-button>
       </el-space>
+      <el-empty v-if="shortcuts.length === 0" description="当前角色暂无其他可用页面" :image-size="60" />
     </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
-import { getHealth, type SystemHealth } from '@/api/system'
+import { getMonitor, type SystemMonitor } from '@/api/system'
 import { useUserStore } from '@/stores/user'
 
+const router = useRouter()
 const userStore = useUserStore()
 
+/** 运行状态属于运维信息，只有具备该权限的角色（默认系统管理员）才展示 */
+const canMonitor = computed(() => userStore.hasPermission('system:monitor:view'))
+
 const loading = ref(false)
-const health = ref<SystemHealth | null>(null)
-const healthError = ref('')
+const monitor = ref<SystemMonitor | null>(null)
+const monitorError = ref('')
 
 const overallType = computed(() => {
-  if (!health.value) return 'info'
-  return health.value.status === 'UP' ? 'success' : 'warning'
+  if (!monitor.value) return 'info'
+  return monitor.value.status === 'UP' ? 'success' : 'warning'
 })
 
 const uptimeText = computed(() => {
-  const seconds = health.value?.uptimeSeconds
+  const seconds = monitor.value?.uptimeSeconds
   if (!seconds && seconds !== 0) return '—'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
@@ -125,41 +150,38 @@ const uptimeText = computed(() => {
   return h > 0 ? `${h} 小时 ${m} 分` : m > 0 ? `${m} 分 ${s} 秒` : `${s} 秒`
 })
 
-const skeletonItems = [
-  { label: 'Docker 编排', value: 'mysql / redis / backend / frontend 四容器', done: true },
-  { label: '建表', value: 'Flyway V1__init_schema.sql · 24 张表', done: true },
-  { label: '种子数据', value: '5 角色 / 47 权限 / 16 用户 / 12 实验室 / 84 设备 / 360 预约', done: true },
-  { label: '统一响应与异常', value: 'R<T> + GlobalExceptionHandler（HTTP 状态码 = 业务码）', done: true },
-  { label: '基础设施', value: 'Redis 分布式锁 / @OpLog 操作日志 / @Sensitive 脱敏 / OSS / 异步线程池', done: true },
-  { label: '前端骨架', value: 'Vue3 + TS + Element Plus + Pinia + 统一 post 封装', done: true },
-  { label: '登录与权限', value: 'JWT + 精简 RBAC（迭代 1）', done: false }
-]
+/** 由后端下发的菜单生成快捷入口（首页本身不列） */
+const shortcuts = computed(() => {
+  const list: Array<{ path: string; title: string }> = []
+  for (const menu of userStore.menus) {
+    if (menu.children?.length) {
+      for (const child of menu.children) {
+        list.push({ path: child.path, title: child.title })
+      }
+    } else if (menu.path !== '/dashboard') {
+      list.push({ path: menu.path, title: menu.title })
+    }
+  }
+  return list
+})
 
-const upcoming = [
-  '迭代 1 认证与权限',
-  '迭代 2 用户管理',
-  '迭代 3 消息通知',
-  '迭代 4 资源管理',
-  '迭代 5 预约管理',
-  '迭代 6 排队与候补',
-  '迭代 7 设备运维',
-  '迭代 8 统计报表'
-]
-
-async function loadHealth(): Promise<void> {
+async function loadMonitor(): Promise<void> {
+  if (!canMonitor.value) {
+    return
+  }
   loading.value = true
-  healthError.value = ''
+  monitorError.value = ''
   try {
-    health.value = await getHealth()
+    monitor.value = await getMonitor()
   } catch (error) {
-    health.value = null
-    healthError.value = error instanceof Error ? error.message : '无法连接后端服务'
+    monitor.value = null
+    monitorError.value = error instanceof Error ? error.message : '无法获取系统运行状态'
   } finally {
     loading.value = false
   }
 }
 
-onMounted(loadHealth)
+onMounted(loadMonitor)
 </script>
 
 <style scoped lang="scss">
@@ -193,5 +215,9 @@ onMounted(loadHealth)
   font-size: 16px;
   font-weight: 600;
   color: var(--lr-text-primary);
+}
+
+.mt-16 {
+  margin-top: 16px;
 }
 </style>

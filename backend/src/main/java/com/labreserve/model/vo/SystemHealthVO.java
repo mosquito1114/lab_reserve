@@ -1,35 +1,32 @@
 package com.labreserve.model.vo;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
+import java.io.Serial;
+import java.io.Serializable;
+
 /**
- * 系统健康检查结果。
+ * 健康检查结果（{@code POST /api/system/health}，<b>免登录</b>）。
  *
- * <p>用于容器健康检查与部署验证：
- * 只有 {@code status = UP} 才算真正可用（数据库与 Redis 都连得上）。
+ * <p>只暴露「活着 / 降级」与版本信息，供 docker-compose 健康检查与部署验证使用；
+ * DB / Redis 的明细、运行时长等运维信息在 {@link SystemMonitorVO} 里，
+ * 需要 {@code system:monitor:view} 权限才能看。
  */
 @Data
-public class SystemHealthVO {
+@Schema(description = "健康检查结果（公开）")
+public class SystemHealthVO implements Serializable {
 
-    /** UP / DEGRADED */
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    @Schema(description = "UP：数据库与 Redis 都通；DEGRADED：有依赖不可用", example = "UP")
     private String status;
 
     private String application;
 
     private String version;
 
-    /** 激活的 Spring profile */
-    private String profiles;
-
-    /** 服务器当前时间（yyyy-MM-dd HH:mm:ss） */
+    @Schema(description = "服务器时间", example = "2026-10-21 22:00:00")
     private String serverTime;
-
-    /** 数据库连通性：UP 或 DOWN: 原因 */
-    private String database;
-
-    /** Redis 连通性：UP 或 DOWN: 原因 */
-    private String redis;
-
-    /** 应用已运行秒数 */
-    private long uptimeSeconds;
 }

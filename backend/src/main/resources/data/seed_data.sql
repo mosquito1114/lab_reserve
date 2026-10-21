@@ -37,7 +37,7 @@ INSERT INTO tb_role (id, code, name, description) VALUES
 -- 2. 权限点
 -- ============================================================================
 
-INSERT INTO tb_permission (code, name, module, description) VALUES
+INSERT IGNORE INTO tb_permission (code, name, module, description) VALUES
 -- 用户管理
 ('user:list',           '查询用户列表',   'user',        NULL),
 ('user:view',           '查看用户详情',   'user',        NULL),
@@ -98,6 +98,7 @@ INSERT INTO tb_permission (code, name, module, description) VALUES
 ('system:role:list',    '查询角色权限',   'system',      NULL),
 ('system:role:update',  '修改角色权限',   'system',      NULL),
 ('system:permission:list','查询权限点',   'system',      NULL),
+('system:monitor:view', '查看系统运行状态', 'system', '仅系统管理员；含 DB / Redis / 运行时长'),
 ('system:log:list',     '查询操作日志',   'system',      NULL),
 ('system:log:export',   '导出操作日志',   'system',      NULL);
 
@@ -106,7 +107,7 @@ INSERT INTO tb_permission (code, name, module, description) VALUES
 -- ============================================================================
 
 -- 学生：设备预约 + 我的实验课表 + 排队 + 报修 + 消息
-INSERT INTO tb_role_permission (role_id, permission_id)
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
@@ -122,7 +123,7 @@ JOIN tb_permission p ON p.code IN (
 WHERE r.code = 'STUDENT';
 
 -- 教师：实验室排课（必须指定上课班级）+ 设备预约 + 排队 + 报修 + 消息
-INSERT INTO tb_role_permission (role_id, permission_id)
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
@@ -138,7 +139,7 @@ JOIN tb_permission p ON p.code IN (
 WHERE r.code = 'TEACHER';
 
 -- 系统管理员：用户管理 + 全部日志与统计
-INSERT INTO tb_role_permission (role_id, permission_id)
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
@@ -147,13 +148,13 @@ JOIN tb_permission p ON p.code IN (
     'dict:list', 'class:list', 'class:manage',
     'message:list', 'message:delivery-log',
     'stat:view', 'stat:export',
-    'system:role:list', 'system:role:update', 'system:permission:list',
+    'system:role:list', 'system:role:update', 'system:permission:list', 'system:monitor:view',
     'system:log:list', 'system:log:export'
 )
 WHERE r.code = 'SYS_ADMIN';
 
 -- 实验室管理员：资源维护 + 预约审批 + 派单验收（注意：没有 user:create，落实需求 Q32）
-INSERT INTO tb_role_permission (role_id, permission_id)
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
@@ -175,7 +176,7 @@ JOIN tb_permission p ON p.code IN (
 WHERE r.code = 'LAB_ADMIN';
 
 -- 维修人员：只看分配给自己的工单
-INSERT INTO tb_role_permission (role_id, permission_id)
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
