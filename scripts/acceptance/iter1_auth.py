@@ -66,7 +66,7 @@ def main():
     # ---------- 2. 五角色登录 ----------
     print("\n[2] 五个角色登录 + 菜单差异")
     accounts = [
-        ("admin", "admin123", "SYS_ADMIN"),
+        ("admin", "123456", "SYS_ADMIN"),
         ("labadmin", "123456", "LAB_ADMIN"),
         ("repair01", "123456", "MAINTAINER"),
         ("stu2021001", "123456", "STUDENT"),
@@ -94,7 +94,9 @@ def main():
     check("系统管理员菜单含「角色权限」", "角色权限" in menus.get("admin", ""), menus.get("admin", ""))
     check("系统管理员菜单含「操作日志」", "操作日志" in menus.get("admin", ""), menus.get("admin", ""))
     check("实验室管理员菜单不含「角色权限」", "角色权限" not in menus.get("labadmin", ""), menus.get("labadmin", ""))
-    check("实验室管理员菜单含「操作日志」", "操作日志" in menus.get("labadmin", ""), menus.get("labadmin", ""))
+    # 需求变更 2：LAB_ADMIN 只管实验室资源与审批，没有操作日志/用户/班级
+    check("实验室管理员菜单不含「操作日志」", "操作日志" not in menus.get("labadmin", ""), menus.get("labadmin", ""))
+    check("实验室管理员菜单不含「系统管理」整组", "系统管理" not in menus.get("labadmin", ""), menus.get("labadmin", ""))
     check("维修人员菜单只有首页", "系统管理" not in menus.get("repair01", ""), menus.get("repair01", ""))
     check("学生菜单只有首页", "系统管理" not in menus.get("stu2021001", ""), menus.get("stu2021001", ""))
     check("教师菜单只有首页", "系统管理" not in menus.get("tea1001", ""), menus.get("tea1001", ""))

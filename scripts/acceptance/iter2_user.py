@@ -70,7 +70,7 @@ def main():
 
     # ---------- 登录 ----------
     print("\n[0] 准备：登录 admin / labadmin / student")
-    status, body, admin = login("admin", "admin123")
+    status, body, admin = login("admin", "123456")
     check("admin 登录", status == 200 and admin, f"status={status} {body}")
     _, _, labadmin = login("labadmin")
     _, _, student = login("stu2021001")
@@ -80,7 +80,7 @@ def main():
     status, body = call("/user/create", {
         "username": STUDENT_USERNAME, "password": "123456", "realName": "测试学生",
         "roleCode": "STUDENT", "phone": "13800009999", "email": "t2025001@x.com",
-        "notifyEmail": 1,
+        # 不传 notifyEmail：验证「邮件通知默认关闭」
         "studentInfo": {"studentNo": STUDENT_NO, "classId": 1},
     }, token=admin)
     if status == 200:
@@ -90,6 +90,10 @@ def main():
         student_id, _ = find_user_id(admin, STUDENT_USERNAME)
         check("新增学生成功或已存在（可重复执行）", student_id is not None, f"status={status} body={body}")
     check("新学生可以用初始密码登录", login(STUDENT_USERNAME)[0] == 200)
+    _, detail = call("/user/get_info", {"id": student_id}, token=admin)
+    check("新建用户「邮件通知」默认关闭（notifyEmail=0）",
+          (detail.get("data") or {}).get("notifyEmail") == 0,
+          str((detail.get("data") or {}).get("notifyEmail")))
 
     # ---------- 2. 学号唯一 ----------
     print("\n[2] 学号唯一性（不能 500）")
@@ -197,6 +201,9 @@ def main():
           (me.get("studentInfo") or {}).get("className") == "软工2101",
           json.dumps(me.get("studentInfo"), ensure_ascii=False))
 
+    # 还原邮件通知开关：默认应为关闭，避免脚本把演示账号留成「已开启」
+    call("/user/update_self", {"notifyEmail": 0}, token=student2)
+
     # ---------- 8. 注销（不物理删除） ----------
     print("\n[8] 注销用户：不物理删除 + 登录被拒")
     status, body = call("/user/update_status",
@@ -242,7 +249,12 @@ def main():
     names = [c["className"] for c in (body.get("data") or [])]
     check("班级下拉可用（含新建班级）", status == 200 and CLASS_NAME in names, f"status={status} {names[:5]}")
     status, body = call("/class/get_page", {"pageNum": 1, "pageSize": 50}, token=labadmin)
-    check("LAB_ADMIN 有 class:manage，可查班级分页", status == 200, f"status={status}")
+    # 需求变更 2：LAB_ADMIN 不再具备 class:manage / user:list / system:log:list
+    check("LAB_ADMIN 调班级分页 -> 403（无 class:manage）", status == 403, f"status={status}")
+    status, body = call("/user/get_page", {"pageNum": 1}, token=labadmin)
+    check("LAB_ADMIN 调用户分页 -> 403（无 user:list）", status == 403, f"status={status}")
+    status, body = call("/operation_log/get_page", {"pageNum": 1}, token=labadmin)
+    check("LAB_ADMIN 调操作日志 -> 403（无 system:log:list）", status == 403, f"status={status}")
     status, body = call("/class/get_page", {"pageNum": 1}, token=student2)
     check("学生调班级分页 -> 403", status == 403, f"status={status}")
 
@@ -267,6 +279,35 @@ def main():
     check("系统管理员姓名未被学生的越权请求改掉",
           (body.get("data") or {}).get("realName") == "系统管理员",
           str((body.get("data") or {}).get("realName")))
+
+    # ---------- 12. 系统运行状态只给系统管理员 ----------
+    print("\n[12] 系统运行状态权限")
+    status, body = call("/system/health", {})
+    health = body.get("data") or {}
+    check("公开健康检查只返回 status，不含 DB/Redis 明细",
+          status == 200 and "database" not in health and "redis" not in health,
+          json.dumps(health, ensure_ascii=False))
+    status, body = call("/system/monitor", {}, token=admin)
+    monitor = body.get("data") or {}
+    check("系统管理员可查看运行状态（含 database / redis / 运行时长）",
+          status == 200 and monitor.get("database") and monitor.get("redis")
+          and monitor.get("uptimeSeconds") is not None,
+          json.dumps(monitor, ensure_ascii=False))
+
+    labadmin_monitor, student_monitor, maintainer_monitor = (
+        call("/system/monitor", {}, token=labadmin)[0],
+        call("/system/monitor", {}, token=student2)[0],
+        call("/system/monitor", {}, token=login("repair01")[2])[0],
+    )
+    check("LAB_ADMIN 调 /system/monitor -> 403", labadmin_monitor == 403, f"status={labadmin_monitor}")
+    check("STUDENT 调 /system/monitor -> 403", student_monitor == 403, f"status={student_monitor}")
+    check("MAINTAINER 调 /system/monitor -> 403", maintainer_monitor == 403, f"status={maintainer_monitor}")
+
+    status, body = call("/auth/get_info", {}, token=admin)
+    admin_perms = (body.get("data") or {}).get("permissions") or []
+    check("只有系统管理员拥有 system:monitor:view",
+          "system:monitor:view" in admin_perms,
+          json.dumps(admin_perms, ensure_ascii=False)[:200])
 
     print("\n" + "=" * 78)
     passed = sum(1 for _, ok, _ in results if ok)

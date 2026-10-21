@@ -6,9 +6,10 @@
 --
 -- ⚠️ 账号密码说明
 --   演示账号的密码是 BCrypt 哈希，明文如下（仅用于课设演示）：
---     admin                    → admin123
---     其余全部演示账号           → 123456
+--     全部演示账号（含 admin） → 123456
 --   生产环境必须删除本文件或修改全部密码。
+--
+--   邮件通知默认关闭（notify_email = 0），用户可在「个人中心」自行开启。
 --
 -- ⚠️ 数据自洽性
 --   tb_reservation 上的 idx uk_reservation_lab_occupy 要求
@@ -231,9 +232,9 @@ INSERT INTO tb_class (id, class_name, college, major, grade, student_count, stat
 -- ============================================================================
 
 INSERT INTO tb_user (id, username, password, real_name, role_id, phone, email, notify_email, status) VALUES
-(1,  'admin',     '$2y$10$xDHNnjoa9FDKDjY4VAwt9uVJzGg1twiwTJcZ4jGX1cjDKOmoHiBFu', '系统管理员', 3, '13800000001', 'admin@lab-reserve.local',    0, 1),
-(2,  'labadmin',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '李文博',     4, '13800000002', 'labadmin@lab-reserve.local', 1, 1),
-(3,  'repair01',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '王建国',     5, '13800000003', 'repair01@lab-reserve.local', 1, 1),
+(1,  'admin',     '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '系统管理员', 3, '13800000001', 'admin@lab-reserve.local',    0, 1),
+(2,  'labadmin',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '李文博',     4, '13800000002', 'labadmin@lab-reserve.local', 0, 1),
+(3,  'repair01',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '王建国',     5, '13800000003', 'repair01@lab-reserve.local', 0, 1),
 (4,  'repair02',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '赵师傅',     5, '13800000004', 'repair02@lab-reserve.local', 0, 1),
 (5,  'stu2021001','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '张一鸣',     1, '13900001001', 'stu2021001@lab-reserve.local', 0, 1),
 (6,  'stu2021002','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '陈思远',     1, '13900001002', 'stu2021002@lab-reserve.local', 0, 1),
@@ -243,8 +244,8 @@ INSERT INTO tb_user (id, username, password, real_name, role_id, phone, email, n
 (10, 'stu2021006','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '吴俊杰',     1, '13900001006', 'stu2021006@lab-reserve.local', 0, 1),
 (11, 'stu2021007','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '郑雅文',     1, '13900001007', 'stu2021007@lab-reserve.local', 0, 1),
 (12, 'stu2021008','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '孙博文',     1, '13900001008', 'stu2021008@lab-reserve.local', 0, 1),
-(13, 'tea1001',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '王lab教授', 2, '13700002001', 'tea1001@lab-reserve.local',   1, 1),
-(14, 'tea1002',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '李静宜',     2, '13700002002', 'tea1002@lab-reserve.local',   1, 1),
+(13, 'tea1001',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '王lab教授', 2, '13700002001', 'tea1001@lab-reserve.local',   0, 1),
+(14, 'tea1002',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '李静宜',     2, '13700002002', 'tea1002@lab-reserve.local',   0, 1),
 (15, 'tea1003',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '陈宏达',     2, '13700002003', 'tea1003@lab-reserve.local',   0, 1),
 (16, 'tea1004',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '周美玲',     2, '13700002004', 'tea1004@lab-reserve.local',   0, 1);
 

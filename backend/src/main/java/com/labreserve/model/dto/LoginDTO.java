@@ -23,7 +23,7 @@ public class LoginDTO implements Serializable {
     @Size(max = 50, message = "账号长度不能超过 50")
     private String username;
 
-    @Schema(description = "密码", example = "admin123")
+    @Schema(description = "密码", example = "123456")
     @NotBlank(message = "请输入密码")
     @Size(min = 6, max = 64, message = "密码长度需在 6~64 位之间")
     private String password;
