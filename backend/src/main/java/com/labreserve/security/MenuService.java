@@ -31,14 +31,17 @@ public class MenuService {
     private record GroupDef(String path, String title, String icon, List<MenuDef> children) {
     }
 
-    /** 总是可见的菜单（不依赖权限）：首页 */
+    /** 总是可见的菜单（不依赖权限）：首页 + 个人中心（所有角色都能改自己的联系方式） */
     private static final List<MenuDef> ALWAYS = List.of(
-            new MenuDef("/dashboard", "首页", "HomeFilled", null)
+            new MenuDef("/dashboard", "首页", "HomeFilled", null),
+            new MenuDef("/profile", "个人中心", "User", null)
     );
 
-    /** 需要权限的分组菜单 */
+    /** 需要权限的分组菜单（迭代 2 起：用户管理 / 班级管理 / 角色权限 / 操作日志） */
     private static final List<GroupDef> GROUPS = List.of(
             new GroupDef("/system", "系统管理", "Setting", List.of(
+                    new MenuDef("/system/user", "用户管理", "UserFilled", PermissionConst.USER_LIST),
+                    new MenuDef("/system/class", "班级管理", "School", PermissionConst.CLASS_MANAGE),
                     new MenuDef("/system/role", "角色权限", "Lock", PermissionConst.SYSTEM_ROLE_LIST),
                     new MenuDef("/system/operation-log", "操作日志", "Document", PermissionConst.SYSTEM_LOG_LIST)
             ))

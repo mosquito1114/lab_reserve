@@ -33,6 +33,24 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '首页', icon: 'HomeFilled' }
       },
       {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/profile/ProfileView.vue'),
+        meta: { title: '个人中心', icon: 'User' }
+      },
+      {
+        path: 'system/user',
+        name: 'SystemUser',
+        component: () => import('@/views/system/UserView.vue'),
+        meta: { title: '用户管理', icon: 'UserFilled', permission: 'user:list' }
+      },
+      {
+        path: 'system/class',
+        name: 'SystemClass',
+        component: () => import('@/views/system/ClassView.vue'),
+        meta: { title: '班级管理', icon: 'School', permission: 'class:manage' }
+      },
+      {
         path: 'system/role',
         name: 'SystemRole',
         component: () => import('@/views/system/RoleView.vue'),
