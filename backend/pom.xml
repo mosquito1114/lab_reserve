@@ -193,6 +193,18 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!--
+            commons-io 版本收敛（必须显式指定，否则导出 Excel 会 500）：
+            EasyExcel 3.3.4 传递依赖的是 commons-io 2.11.0，但它内部用了 2.12+ 才有的
+            UnsynchronizedByteArrayOutputStream.builder()，运行期报 NoSuchMethodError。
+            这里显式钉到 2.16.1，同时满足 EasyExcel 与 Tika 的需要。
+        -->
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.16.1</version>
+        </dependency>
+
         <!-- ==================== 工具 ==================== -->
         <dependency>
             <groupId>cn.hutool</groupId>
