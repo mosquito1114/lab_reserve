@@ -232,7 +232,7 @@ async function handleCommand(command: string): Promise<void> {
 
 // 刷新页面后 token 还在但用户信息为空，这里补一次请求（菜单与权限依赖它）
 onMounted(async () => {
-  if (userStore.isLogin && !userStore.userInfo) {
+  if (userStore.isLogin && (!userStore.userInfo || userStore.menus.length === 0)) {
     try {
       await userStore.fetchInfo()
     } catch {

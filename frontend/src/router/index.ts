@@ -112,7 +112,8 @@ router.beforeEach(async (to) => {
 
   // 已登录但用户信息还没加载（刷新页面）→ 先拉一次，拿到权限码才能判断路由权限
   const userStore = useUserStore()
-  if (!userStore.userInfo) {
+  // 菜单也是 get_info 下发的：menus 为空时同样要补拉（否则侧边栏空着）
+  if (!userStore.userInfo || userStore.menus.length === 0) {
     try {
       await userStore.fetchInfo()
     } catch {
