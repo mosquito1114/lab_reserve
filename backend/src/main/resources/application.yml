@@ -192,6 +192,19 @@ lab-reserve:
 # Spring AI（客户端配置：仅在 lab-reserve.rag.enabled=true 时被 SpringAIConfig 读取）
 # ============================================================
 spring.ai:
+  # 默认关闭所有模型类型：Spring AI 1.0 的自动装配在缺少 api-key 时会直接让应用启动失败
+  # （报错形如「OpenAI API key must be set ... OpenAiChatModel / OpenAiAudioSpeechModel」）。
+  # RAG 默认 enabled=false，所以这里默认 none；启用 RAG 时把下面两个环境变量切成 openai：
+  #   SPRING_AI_MODEL_CHAT=openai
+  #   SPRING_AI_MODEL_EMBEDDING=openai
+  model:
+    chat: ${SPRING_AI_MODEL_CHAT:none}
+    embedding: ${SPRING_AI_MODEL_EMBEDDING:none}
+    audio:
+      speech: none
+      transcription: none
+    image: none
+    moderation: none
   openai:
     base-url: ${LLM_BASE_URL:https://api.deepseek.com/v1}
     api-key:  ${LLM_API_KEY:}
