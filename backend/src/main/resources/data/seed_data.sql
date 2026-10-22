@@ -92,6 +92,7 @@ INSERT IGNORE INTO tb_permission (code, name, module, description) VALUES
 -- 消息
 ('message:list',        '查看消息',       'message',     NULL),
 ('message:delivery-log','查看邮件投递记录','message',    NULL),
+('message:send',       '发送系统通知',   'message',     '管理员向指定用户发送系统通知（站内信 + 邮件）'),
 -- 统计
 ('stat:view',           '查看统计',       'statistics',  NULL),
 ('stat:export',         '导出报表',       'statistics',  NULL),
@@ -147,7 +148,7 @@ JOIN tb_permission p ON p.code IN (
     'user:list', 'user:view', 'user:create', 'user:update', 'user:disable', 'user:view-phone',
     'resource:lab:list', 'resource:equip:list', 'resource:log:list',
     'dict:list', 'class:list', 'class:manage',
-    'message:list', 'message:delivery-log',
+    'message:list', 'message:delivery-log', 'message:send',
     'stat:view', 'stat:export',
     'system:role:list', 'system:role:update', 'system:permission:list', 'system:monitor:view',
     'system:log:list', 'system:log:export'

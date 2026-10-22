@@ -61,6 +61,18 @@ export const routes: RouteRecordRaw[] = [
         name: 'SystemOperationLog',
         component: () => import('@/views/system/OperationLogView.vue'),
         meta: { title: '操作日志', icon: 'Document', permission: 'system:log:list' }
+      },
+      {
+        path: 'message/inbox',
+        name: 'MessageInbox',
+        component: () => import('@/views/message/InboxView.vue'),
+        meta: { title: '消息中心', icon: 'ChatDotRound', permission: 'message:list' }
+      },
+      {
+        path: 'message/delivery-log',
+        name: 'MessageDeliveryLog',
+        component: () => import('@/views/message/DeliveryLogView.vue'),
+        meta: { title: '邮件投递记录', icon: 'Promotion', permission: 'message:delivery-log' }
       }
       // ↓↓↓ 后续迭代在此按模块追加子路由 ↓↓↓
       // 预约管理：/reservation/apply  /reservation/my  /reservation/audit  /reservation/change-audit

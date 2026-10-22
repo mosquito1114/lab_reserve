@@ -44,6 +44,10 @@ public class MenuService {
                     new MenuDef("/system/class", "班级管理", "School", PermissionConst.CLASS_MANAGE),
                     new MenuDef("/system/role", "角色权限", "Lock", PermissionConst.SYSTEM_ROLE_LIST),
                     new MenuDef("/system/operation-log", "操作日志", "Document", PermissionConst.SYSTEM_LOG_LIST)
+            )),
+            new GroupDef("/message", "消息通知", "Bell", List.of(
+                    new MenuDef("/message/inbox", "消息中心", "ChatDotRound", PermissionConst.MESSAGE_LIST),
+                    new MenuDef("/message/delivery-log", "邮件投递记录", "Promotion", PermissionConst.MESSAGE_DELIVERY_LOG)
             ))
     );
 

@@ -94,6 +94,7 @@ public final class PermissionConst {
     // ------------------------------------------------------------
     public static final String MESSAGE_LIST = "message:list";
     public static final String MESSAGE_DELIVERY_LOG = "message:delivery-log";
+    public static final String MESSAGE_SEND = "message:send";
     public static final String STAT_VIEW = "stat:view";
     public static final String STAT_EXPORT = "stat:export";
 

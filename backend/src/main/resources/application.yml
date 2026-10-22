@@ -82,6 +82,9 @@ spring:
 
   # ------------------------------------------------------------
   # SMTP 邮件（迭代 3 使用）
+  #
+  # QQ 邮箱：MAIL_PORT=465 + ssl=true + 授权码（不是登录密码）
+  # 本地调试（scripts/tools/dev_smtp.py）：MAIL_PORT=1025 + MAIL_SMTP_SSL=false + MAIL_SMTP_AUTH=false
   # ------------------------------------------------------------
   mail:
     host: ${MAIL_HOST:smtp.qq.com}
@@ -92,9 +95,9 @@ spring:
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${MAIL_SMTP_AUTH:true}
           ssl:
-            enable: true
+            enable: ${MAIL_SMTP_SSL:true}
           connectiontimeout: 10000
           timeout: 10000
           writetimeout: 10000
@@ -152,6 +155,12 @@ lab-reserve:
     from-name: ${MAIL_FROM_NAME:实验室预约管理系统}
     # 邮件投递最大重试次数，超过进死信队列
     max-retry: 3
+    # 提示：max-retry 是「总投递次数上限（含首次）」，默认 3 = 首发 1 次 + 重试 2 次后进死信
+    # 消费轮询 / 重投巡检间隔与最小闲置时间，联调时可临时调小（见 acceptance 脚本）
+    poll-interval-ms: ${MAIL_POLL_INTERVAL_MS:2000}
+    reclaim-interval-ms: ${MAIL_RECLAIM_INTERVAL_MS:30000}
+    retry-min-idle-seconds: ${MAIL_RETRY_MIN_IDLE_SECONDS:60}
+    enqueue-grace-seconds: ${MAIL_ENQUEUE_GRACE_SECONDS:60}
   sensitive:
     # 允许查看完整手机号的角色（脱敏例外，必须写操作日志）
     # 需求变更 2：LAB_ADMIN 不再具备 user:view-phone，脱敏例外只剩系统管理员

@@ -52,8 +52,17 @@
         </div>
 
         <div class="layout-header-right">
-          <el-tooltip content="消息中心（迭代 3 开放）" placement="bottom">
-            <el-badge :value="0" :hidden="true" class="layout-badge">
+          <el-tooltip
+            :content="messageStore.unread > 0 ? `有 ${messageStore.unread} 条未读消息` : '消息中心'"
+            placement="bottom"
+          >
+            <el-badge
+              :value="messageStore.unread"
+              :max="99"
+              :hidden="messageStore.unread === 0"
+              class="layout-badge"
+              @click="gotoInbox"
+            >
               <el-icon :size="18"><Bell /></el-icon>
             </el-badge>
           </el-tooltip>
@@ -120,15 +129,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { updatePassword } from '@/api/auth'
+import { useMessageStore } from '@/stores/message'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const messageStore = useMessageStore()
+
+/** 未读角标轮询（30s 一次，页面隐藏时不打扰后端） */
+let unreadTimer: number | undefined
+
+function gotoInbox(): void {
+  void router.push('/message/inbox')
+}
 
 const collapsed = ref(false)
 
@@ -227,6 +245,7 @@ async function handleCommand(command: string): Promise<void> {
     return
   }
   await userStore.logout()
+  messageStore.reset()
   await router.replace('/login')
 }
 
@@ -237,7 +256,24 @@ onMounted(async () => {
       await userStore.fetchInfo()
     } catch {
       await router.replace('/login')
+      return
     }
+  }
+  // 未读角标：进页面拉一次，之后每 30s 轮询（没有消息权限的角色接口会 403，静默忽略）
+  if (userStore.hasPermission('message:list')) {
+    void messageStore.fetchUnread()
+    unreadTimer = window.setInterval(() => {
+      if (!document.hidden) {
+        void messageStore.fetchUnread()
+      }
+    }, 30_000)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (unreadTimer) {
+    window.clearInterval(unreadTimer)
+    unreadTimer = undefined
   }
 })
 </script>
