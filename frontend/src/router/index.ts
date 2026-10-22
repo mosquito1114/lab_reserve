@@ -63,6 +63,36 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '操作日志', icon: 'Document', permission: 'system:log:list' }
       },
       {
+        path: 'resource/laboratory',
+        name: 'ResourceLaboratory',
+        component: () => import('@/views/resource/LaboratoryView.vue'),
+        meta: { title: '实验室管理', icon: 'House', permission: 'resource:lab:list' }
+      },
+      {
+        path: 'resource/equipment',
+        name: 'ResourceEquipment',
+        component: () => import('@/views/resource/EquipmentView.vue'),
+        meta: { title: '设备管理', icon: 'Cpu', permission: 'resource:equip:list' }
+      },
+      {
+        path: 'resource/dict',
+        name: 'ResourceDict',
+        component: () => import('@/views/resource/DictView.vue'),
+        meta: { title: '字典维护', icon: 'Collection', permission: 'dict:manage' }
+      },
+      {
+        path: 'resource/log',
+        name: 'ResourceLog',
+        component: () => import('@/views/resource/ResourceLogView.vue'),
+        meta: { title: '资源更新日志', icon: 'Tickets', permission: 'resource:log:list' }
+      },
+      {
+        path: 'resource/availability',
+        name: 'ResourceAvailability',
+        component: () => import('@/views/resource/AvailabilityView.vue'),
+        meta: { title: '资源可用性', icon: 'Calendar', permission: 'resource:lab:list' }
+      },
+      {
         path: 'message/inbox',
         name: 'MessageInbox',
         component: () => import('@/views/message/InboxView.vue'),
@@ -76,10 +106,8 @@ export const routes: RouteRecordRaw[] = [
       }
       // ↓↓↓ 后续迭代在此按模块追加子路由 ↓↓↓
       // 预约管理：/reservation/apply  /reservation/my  /reservation/audit  /reservation/change-audit
-      // 资源管理：/resource/laboratory  /resource/equipment  /resource/update-log
       // 排队候补：/queue/my  /queue/ban
       // 设备运维：/repair/apply  /repair/my  /repair/order  /repair/task
-      // 消息通知：/message
       // 数据统计：/statistics
       // 系统管理：/system/user  /system/role  /system/operation-log
     ]
