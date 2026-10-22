@@ -12,7 +12,7 @@
 |---|---|
 | 后端 | Spring Boot 3.3 · MyBatis-Plus · Spring Security(JWT) · Redisson（分布式锁） · Flyway · EasyExcel · Knife4j |
 | 前端 | Vue 3 · TypeScript · Vite · Element Plus · Pinia · axios · ECharts |
-| 存储 | MySQL 8（24 张表，统一 `tb_` 前缀）· Redis 7（排队 ZSet / 收件箱 / 邮件 Stream / 分布式锁） |
+| 存储 | MySQL 8（24 张业务表 + 6 张 RAG 表，统一 `tb_` 前缀）· Redis 7（排队 ZSet / 收件箱 / 邮件 Stream / 分布式锁） |
 | 部署 | Docker Compose（`docker-compose.yml`） |
 
 ```
@@ -23,6 +23,7 @@ backend/src/main/java/com/labreserve/
 ├─ util/     工具组件（RedisUtils / RedisLockTemplate / IpUtils / JsonUtils / SensitiveUtils …）
 ├─ model/    entity · dto · vo
 ├─ controller/ · service/ · service/impl/ · mapper/
+└─ rag/      RAG 模块骨架（默认 RAG_ENABLED=false，独立于业务模块）
 frontend/src/  api · stores · router · layouts · views · utils
 ```
 
@@ -148,3 +149,65 @@ cd frontend && npm run build && npm run type-check
 - 迭代划分、任务清单、验收标准见本机 `agents/plan.md`（9 个迭代，每个迭代结束出「自测报告 + 验收清单」，全绿才合并 `master`）。
 - 需求/数据库/接口的正式说明见 `instructs/数据库表说明.md` 与 `docs/`（`docs/` 随迭代 8 收尾补齐）。
 - 需求变更一律先记录、再评估影响面、最后改代码，不口头改。
+
+---
+
+## 7. 当前实现状态（单一事实来源 · 新会话先读这一节）
+
+> 最后更新：2026-10-21（迭代 2 完成）。**本节与代码冲突时以代码为准，并回来更新本节。**
+
+### 7.1 迭代进度
+
+| 迭代 | 内容 | 状态 |
+|---|---|---|
+| 0 | 工程骨架 + Docker + Flyway 建表 + 种子数据 | ✅ 已发布（`master` `f0e26d6`，tag `v0.1.0`） |
+| 1 | 认证与权限（JWT + 精简 RBAC + 角色权限页 + 操作日志页） | ✅ 已完成，提交在 `dev`（**未合 master**） |
+| 2 | 用户管理（用户 CRUD / 班级 / 手机号脱敏 / 个人中心） | ✅ 已完成，提交在 `dev`（**未合 master**） |
+| 3 | 消息通知（站内信 + Redis Stream 邮件投递） | ⬜ 未开始（需 `.env` 的 QQ SMTP 授权码） |
+| 4 | 资源管理（实验室 / 设备 / 字典 / 可用时段） | ⬜ 未开始 |
+| 5 | 预约管理（预检 / 提交 / 审核 / 调整申请 + 并发判冲） | ⬜ 未开始 |
+| 6 | 排队与候补（Redis ZSet + 超时顺延 + 7 天禁入） | ⬜ 未开始 |
+| 7 | 设备运维（报修 → 派单 → 维修 → 验收 + OSS 传图） | ⬜ 未开始（需 OSS 凭据） |
+| 8 | 统计报表 + Excel 导出 + 交付文档 | ⬜ 未开始 |
+| R0 | RAG 模块骨架（另一批提交，`RAG_ENABLED=false`） | 🟡 骨架在 `dev`，未合 master |
+
+### 7.2 已实现的接口（全部 `POST` + JSON）
+
+| 模块 | 路径 |
+|---|---|
+| 认证 | `/api/auth/login` `refresh` `logout` `get_info` `update_password` |
+| 系统 | `/api/system/health`（公开，仅 status）、`/api/system/monitor`（`system:monitor:view`，仅 SYS_ADMIN） |
+| 用户 | `/api/user/get_page` `get_info` `create` `update` `update_status` `update_self` `get_self_profile` `list_maintainer` `list_option` |
+| 班级 | `/api/class/get_list` `get_page` `create` `update` |
+| 角色/权限 | `/api/role/get_list` `get_permission_list` `update_permission`、`/api/permission/get_list` |
+| 操作日志 | `/api/operation_log/get_page` `get_info` `export` |
+
+**尚未实现**：`/api/reservation*`、`/api/queue*`、`/api/repair*`、`/api/message*`、`/api/statistics*`、`/api/laboratory*`、`/api/equipment*`、`/api/file/upload`（对应迭代 3–8）。
+
+### 7.3 与最初需求不同的地方（必须知道）
+
+1. **实验室预约主体收窄为教师**（`agents/req.md` §10 变更 1）：`resourceType=1` 只有 `TEACHER` 能约，且必须带 `classIds`；学生只看「我的实验课表」（反查 `tb_reservation_class`）；设备师生都能约。
+2. **LAB_ADMIN 权限收窄到本职**（`agents/req.md` §10 变更 2）：只有资源维护 + 预约/调整审批 + 排队调度 + 报修验收；**没有**用户、班级、操作日志、邮件投递记录；查看完整手机号的例外只剩 `SYS_ADMIN`。
+3. **角色 / 账号 / 学号工号不可修改**：`/user/update` 不含这些字段，换角色需注销后重建。
+4. **邮件通知默认关闭**（`notify_email=0`），由用户在个人中心自行开启；**全部演示账号密码统一 `123456`（含 admin）**。
+
+### 7.4 权限与数据现状
+
+- 权限是数据（`tb_role_permission`），缓存 `lab:reserve:perm:role:{roleId}`，权限变更后由 `PermissionService` 删缓存。
+- 现存权限点 **58 个**（含 `system:monitor:view`）；各角色：SYS_ADMIN 22 / LAB_ADMIN 27 / STUDENT 15 / TEACHER 15 / MAINTAINER 6。
+- 迁移：`V1` 建表 → `V2` RAG 6 表 + 6 权限 → `V3` 修 RAG 授权 → `V4` `system:monitor:view` → `V5` 收窄 LAB_ADMIN。**新增结构请写 V6+，不要改已执行过的脚本**。
+- 表：24 张业务表（`tb_` 前缀）+ 6 张 RAG 表。
+- 手机号：明文存储、接口层脱敏；本人看自己明文；`revealPhone=true` + `user:view-phone` 才给明文，并写 `QUERY_PHONE` 日志。
+- 不物理删除：用户/实验室/设备用 `status`，预约用状态流转；操作日志只增不改不删。
+
+### 7.5 演示账号与数据
+
+- **密码全部 `123456`**（含 `admin`）；`notify_email` 默认 0（关闭）。
+- 账号：`admin`(SYS_ADMIN)、`labadmin`(LAB_ADMIN)、`repair01`/`repair02`(MAINTAINER)、`stu2021001~08`、`tea1001~04`；验收脚本会额外建 `t2025001` / `tt2001` / `tm2001` 与班级 `测试2501`。
+- 重置数据：`docker compose down -v && ./dev.sh start`（Flyway + 种子自动重建）。
+
+### 7.6 验收脚本与文档位置
+
+- 验收脚本：`scripts/acceptance/iter1_auth.py`（62 项）、`iter2_user.py`（48 项）；先 `./dev.sh start`，再 `python3 scripts/acceptance/iterX.py`。
+- 需求/设计/接口/计划：`agents/req.md`、`agents/design.md`、`agents/api.md`、`agents/plan.md`（**本机协作稿，不进 Git**，各自带「变更记录 / 自测报告」）。
+- 协作者速查：`instructs/数据库表说明.md`；交付文档在 `docs/`（迭代 8 补齐），RAG 模块另有 `docs/rag-design.md`。
