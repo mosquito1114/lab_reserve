@@ -163,7 +163,7 @@ cd frontend && npm run build && npm run type-check
 | 0 | 工程骨架 + Docker + Flyway 建表 + 种子数据 | ✅ 已发布（`master` `f0e26d6`，tag `v0.1.0`） |
 | 1 | 认证与权限（JWT + 精简 RBAC + 角色权限页 + 操作日志页） | ✅ 已完成，提交在 `dev`（**未合 master**） |
 | 2 | 用户管理（用户 CRUD / 班级 / 手机号脱敏 / 个人中心） | ✅ 已完成，提交在 `dev`（**未合 master**） |
-| 3 | 消息通知（站内信 + Redis Stream 邮件投递） | ⬜ 未开始（需 `.env` 的 QQ SMTP 授权码） |
+| 3 | 消息通知（站内信 + Redis Stream 邮件投递 + 重试/死信） | ✅ 已完成，提交在 `dev`（未合 master；QQ 真发待授权码，本地调试 SMTP 已验通） |
 | 4 | 资源管理（实验室 / 设备 / 字典 / 可用时段） | ⬜ 未开始 |
 | 5 | 预约管理（预检 / 提交 / 审核 / 调整申请 + 并发判冲） | ⬜ 未开始 |
 | 6 | 排队与候补（Redis ZSet + 超时顺延 + 7 天禁入） | ⬜ 未开始 |
@@ -181,6 +181,7 @@ cd frontend && npm run build && npm run type-check
 | 班级 | `/api/class/get_list` `get_page` `create` `update` |
 | 角色/权限 | `/api/role/get_list` `get_permission_list` `update_permission`、`/api/permission/get_list` |
 | 操作日志 | `/api/operation_log/get_page` `get_info` `export` |
+| 消息 | `/api/message/get_page` `get_info` `get_unread_count` `read` `read_all` `delete` `clear` `get_delivery_log_page` `send_test_email` `send`（`message:send`，仅 SYS_ADMIN） |
 
 **尚未实现**：`/api/reservation*`、`/api/queue*`、`/api/repair*`、`/api/message*`、`/api/statistics*`、`/api/laboratory*`、`/api/equipment*`、`/api/file/upload`（对应迭代 3–8）。
 
@@ -190,12 +191,14 @@ cd frontend && npm run build && npm run type-check
 2. **LAB_ADMIN 权限收窄到本职**（`agents/req.md` §10 变更 2）：只有资源维护 + 预约/调整审批 + 排队调度 + 报修验收；**没有**用户、班级、操作日志、邮件投递记录；查看完整手机号的例外只剩 `SYS_ADMIN`。
 3. **角色 / 账号 / 学号工号不可修改**：`/user/update` 不含这些字段，换角色需注销后重建。
 4. **邮件通知默认关闭**（`notify_email=0`），由用户在个人中心自行开启；**全部演示账号密码统一 `123456`（含 admin）**。
+5. **消息只走「统一入口 + Redis Stream」**：业务代码一律调 `MessageService.send(...)`，禁止直接写 `tb_message` 或手动 `XADD`；
+   邮件状态机 `NULL 未入队 → SENDING 投递中 → OK / DEAD`，`max-retry`（默认 3）是**总投递次数上限**，超过即进 `stream:msg:email:dead`。
 
 ### 7.4 权限与数据现状
 
 - 权限是数据（`tb_role_permission`），缓存 `lab:reserve:perm:role:{roleId}`，权限变更后由 `PermissionService` 删缓存。
-- 现存权限点 **58 个**（含 `system:monitor:view`）；各角色：SYS_ADMIN 22 / LAB_ADMIN 27 / STUDENT 15 / TEACHER 15 / MAINTAINER 6。
-- 迁移：`V1` 建表 → `V2` RAG 6 表 + 6 权限 → `V3` 修 RAG 授权 → `V4` `system:monitor:view` → `V5` 收窄 LAB_ADMIN。**新增结构请写 V6+，不要改已执行过的脚本**。
+- 现存权限点 **59 个**（含 `system:monitor:view`、`message:send`）；各角色：SYS_ADMIN 23 / LAB_ADMIN 27 / STUDENT 15 / TEACHER 15 / MAINTAINER 6。
+- 迁移：`V1` 建表 → `V2` RAG 6 表 + 6 权限 → `V3` 修 RAG 授权 → `V4` `system:monitor:view` → `V5` 收窄 LAB_ADMIN → `V6` `message:send`。**新增结构请写 V7+，不要改已执行过的脚本**。
 - 表：24 张业务表（`tb_` 前缀）+ 6 张 RAG 表。
 - 手机号：明文存储、接口层脱敏；本人看自己明文；`revealPhone=true` + `user:view-phone` 才给明文，并写 `QUERY_PHONE` 日志。
 - 不物理删除：用户/实验室/设备用 `status`，预约用状态流转；操作日志只增不改不删。
@@ -208,6 +211,7 @@ cd frontend && npm run build && npm run type-check
 
 ### 7.6 验收脚本与文档位置
 
-- 验收脚本：`scripts/acceptance/iter1_auth.py`（62 项）、`iter2_user.py`（48 项）；先 `./dev.sh start`，再 `python3 scripts/acceptance/iterX.py`。
+- 验收脚本：`scripts/acceptance/iter1_auth.py`（62 项）、`iter2_user.py`（48 项）、`iter3_message.py`（59 项）；先 `./dev.sh start`，再 `python3 scripts/acceptance/iterX.py`。
+- 邮件联调：`python3 scripts/tools/dev_smtp.py --port 1025`（本地调试 SMTP，邮件落盘 `/tmp/dev_smtp/*.eml`），后端需 `MAIL_HOST=127.0.0.1 MAIL_PORT=1025 MAIL_SMTP_AUTH=false MAIL_SMTP_SSL=false`；QQ 真发只需改 `.env` 的 `MAIL_USERNAME`/`MAIL_PASSWORD`（授权码）后重启。
 - 需求/设计/接口/计划：`agents/req.md`、`agents/design.md`、`agents/api.md`、`agents/plan.md`（**本机协作稿，不进 Git**，各自带「变更记录 / 自测报告」）。
 - 协作者速查：`instructs/数据库表说明.md`；交付文档在 `docs/`（迭代 8 补齐），RAG 模块另有 `docs/rag-design.md`。
