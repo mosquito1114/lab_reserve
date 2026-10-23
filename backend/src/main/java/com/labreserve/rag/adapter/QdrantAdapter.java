@@ -261,6 +261,67 @@ public class QdrantAdapter {
                 .build();
     }
 
+    /**
+     * 同步某文档所有 point 的 {@code status} payload（管理端 enable/disable 调用）。
+     *
+     * <p><b>为什么必须同步</b>：检索侧 {@link #enabledDocsFilter()} 按 payload.status=1 过滤，
+     * 而 {@code tb_rag_document.status} 与 Qdrant payload 是两份数据。
+     * 只改 MySQL 会让刚启用的文档在检索时仍被排除。
+     *
+     * @param documentId 文档 ID
+     * @param status     1 启用 / 0 停用
+     */
+    public void syncDocStatus(Long documentId, Integer status) {
+        try {
+            // ① scroll 拿该文档的所有 point id（payload.filter 按 document_id）
+            Common.Filter docFilter = Common.Filter.newBuilder()
+                    .addMust(Common.Condition.newBuilder()
+                            .setField(Common.FieldCondition.newBuilder()
+                                    .setKey("document_id")
+                                    .setMatch(Common.Match.newBuilder().setInteger(documentId).build())
+                                    .build())
+                            .build())
+                    .build();
+
+            List<Common.PointId> pointIds = new ArrayList<>();
+            Common.PointId offset = null;
+            do {
+                Points.ScrollPoints.Builder sb = Points.ScrollPoints.newBuilder()
+                        .setCollectionName(collectionName())
+                        .setLimit(1000)
+                        .setFilter(docFilter)
+                        .setWithPayload(Points.WithPayloadSelector.newBuilder().setEnable(false).build());
+                if (offset != null) {
+                    sb.setOffset(offset);
+                }
+                Points.ScrollResponse resp = await(
+                        client.scrollAsync(sb.build(), Duration.ofSeconds(15)),
+                        Duration.ofSeconds(25));
+                resp.getResultList().forEach(p -> pointIds.add(p.getId()));
+                offset = resp.hasNextPageOffset() ? resp.getNextPageOffset() : null;
+            } while (offset != null && !pointIds.isEmpty());
+
+            if (pointIds.isEmpty()) {
+                log.debug("[RAG][Qdrant] 文档 {} 没有 point，无需同步 status", documentId);
+                return;
+            }
+
+            // ② 批量写 payload.status
+            Map<String, JsonWithInt.Value> payload = Map.of(
+                    "status", ValueFactory.value(status.longValue()));
+            await(client.setPayloadAsync(collectionName(), payload, pointIds,
+                            true, Points.WriteOrderingType.Weak, Duration.ofSeconds(15)),
+                    Duration.ofSeconds(25));
+
+            log.info("[RAG][Qdrant] 同步文档 payload.status: documentId={} status={} points={}",
+                    documentId, status, pointIds.size());
+        } catch (Exception e) {
+            // 同步失败不阻断业务：MySQL 已改，Qdrant 同步失败只记日志（R5 加补偿任务）
+            log.warn("[RAG][Qdrant] 同步文档 status 失败 documentId={} status={}: {}",
+                    documentId, status, e.getMessage());
+        }
+    }
+
     /** JsonWithInt.Value → Java Object */
     private static Object fromJsonValue(JsonWithInt.Value v) {
         return switch (v.getKindCase()) {

@@ -64,6 +64,9 @@ public class RagDocumentServiceImpl implements RagDocumentService {
     private RagIngestDispatcher dispatcher;
 
     @Autowired
+    private com.labreserve.rag.adapter.QdrantAdapter qdrantAdapter;
+
+    @Autowired
     private SecurityUtils securityUtils;
 
     /**
@@ -255,6 +258,9 @@ public class RagDocumentServiceImpl implements RagDocumentService {
         if (affected == 0) {
             throw BizException.notFound("文档不存在");
         }
+        // 同步 Qdrant payload.status —— 检索侧按 payload.status=1 过滤，
+        // 不同步会导致刚启用的文档在检索时仍被排除（R3 联调发现的缺陷）
+        qdrantAdapter.syncDocStatus(documentId, status);
         log.info("[RAG] 文档 {} 业务状态 -> {}", documentId, status == 1 ? "启用" : "停用");
     }
 
