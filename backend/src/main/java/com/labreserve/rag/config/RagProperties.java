@@ -48,6 +48,16 @@ public class RagProperties {
     /** 提示词文件位置（R5 启用） */
     private Prompt prompt = new Prompt();
 
+    /** 失败自动续跑配置（R5） */
+    private Recovery recovery = new Recovery();
+
+    /**
+     * LLM 客户端配置 (R2 起, 供 {@code DashScopeEmbeddingClient} 用).
+     * 聊天仍走 Spring AI {@code spring.ai.openai.*}; embedding 因为 Spring AI 1.0 GA
+     * 与 DashScope OpenAI-兼容模式有 content-type 兼容问题, 走自家 HTTP 客户端.
+     */
+    private Llm llm = new Llm();
+
     // ------------------------------------------------------------
 
     @Getter
@@ -61,8 +71,15 @@ public class RagProperties {
         private int chunkMaxChars = 500;
         /** 切窗重叠 */
         private int chunkOverlap = 100;
-        /** Embedding 批大小 */
-        private int embedBatchSize = 16;
+        /**
+         * Embedding 单批条数。
+         *
+         * <p><b>上限 10</b>：DashScope text-embedding-v3 的 compatible-mode 接口
+         * 对 {@code input.contents} 有 batch ≤ 10 的硬限制，
+         * 超过会返回 {@code 400 InvalidParameter: batch size is invalid}。
+         * 客户端（DashScopeEmbeddingClient）内部还会再兜一次，配置写大也不会炸。
+         */
+        private int embedBatchSize = 10;
         /** 失败重试次数 */
         private int retryAttempts = 3;
         /** 失败重试退避（ms） */
@@ -88,8 +105,38 @@ public class RagProperties {
         private int maxContextTokens = 8000;
         /** 留给 LLM 的最近对话轮数 */
         private int historyWindow = 6;
-        /** 单次回答 Tool 调用最大循环次数 */
+
+        /**
+         * KB 检索返回的切片条数（topK）。
+         * <p>与 {@link #historyWindow} 无关（曾经误用过 historyWindow 当 topK，已修正）。
+         * 值太大 → prompt 变长、引噪声；太小 → 漏召回。5 是 R4 评估集实测较好的值。
+         */
+        private int kbTopK = 5;
+
+        /** Hybrid 检索每路预取条数倍数（prefetchK = kbTopK * this，给 RRF 足够候选） */
+        private int kbPrefetchFactor = 3;
+        /** 单次回答 Tool 调用最大循环次数（v3 已取消 Tool Call，保留字段不动） */
         private int toolMaxLoops = 5;
+        /**
+         * 检索硬拒阈值（rag-design §12.6 / R4 三段式门禁）。
+         *
+         * <p><b>为何是两个值</b>：小语料下 cosine 区分度不够（实测负样本 0.4638 夹在
+         * 正样本 0.4508~0.7121 之间），单一阈值无法分开。改为三段：
+         * <ul>
+         *   <li>{@code >= kbAcceptScore(0.60)} → 明确相关，直接放行</li>
+         *   <li>{@code <  kbRejectScore(0.35)} → 明确不相关，直接拒</li>
+         *   <li>中间灰区 → 调 LLM 判证据是否足以回答（见 RelevanceJudge）</li>
+         * </ul>
+         *
+         * <p>{@code kbMinScore} 保留为兼容字段（等同 rejectScore，R3 旧语义）。
+         */
+        private double kbMinScore = 0.35;
+
+        /** 灰区上界：dense 分 ≥ 此值直接放行（不调 LLM 判相关性） */
+        private double kbAcceptScore = 0.60;
+
+        /** 灰区下界：dense 分 < 此值直接拒 */
+        private double kbRejectScore = 0.35;
     }
 
     @Getter
@@ -116,5 +163,43 @@ public class RagProperties {
         private String rewrite;
         private String intent;
         private String answer;
+    }
+
+    /**
+     * 失败自动续跑（{@code RecoveryRunner}）。
+     *
+     * <p>扫描 {@code tb_rag_document.pipeline_state = FAILED} 的文档，
+     * 在 {@code ingest.retry-attempts} 与 {@code retry-backoff-ms} 约束下自动 v+1 重跑。
+     */
+    @Getter
+    @Setter
+    public static class Recovery {
+        /** 总开关（关闭后只保留 admin 手动 /run_step） */
+        private boolean enabled = true;
+        /** 扫描间隔（ms），默认 5 分钟 */
+        private long intervalMs = 300_000L;
+        /** 启动后延迟多久开始第一次扫描（ms），默认 1 分钟 */
+        private long initialDelayMs = 60_000L;
+    }
+
+    @Getter
+    @Setter
+    public static class Llm {
+        /** 供应商标识（注释用, 不参与代码逻辑） */
+        private String provider = "tongyi";
+        /** OpenAI-兼容 API 基础 URL */
+        private String baseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+        /** API key */
+        private String apiKey = "";
+        /** 聊天模型名（R3 ChatModel 用 spring.ai.openai.chat.options.model, 不走这里） */
+        private String chatModel = "qwen-plus";
+        /** Embedding 模型名 */
+        private String embeddingModel = "text-embedding-v3";
+        /** HTTP 超时（秒） */
+        private int timeoutSeconds = 30;
+        /** 采样温度：低温度 → 引用类回答更稳定 */
+        private double temperature = 0.2;
+        /** 单次回答最大 token 数 */
+        private int maxTokens = 2000;
     }
 }

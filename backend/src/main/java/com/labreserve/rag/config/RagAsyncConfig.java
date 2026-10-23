@@ -1,6 +1,8 @@
 package com.labreserve.rag.config;
 
+import com.labreserve.rag.util.MdcTaskDecorator;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,6 +33,9 @@ public class RagAsyncConfig {
     /** 摄取管道线程池 Bean 名（@Async 调用方按此引用） */
     public static final String INGEST_EXECUTOR = "ragIngestExecutor";
 
+    @Autowired
+    private MdcTaskDecorator mdcTaskDecorator;
+
     @Bean(name = INGEST_EXECUTOR)
     public ThreadPoolTaskExecutor ragIngestExecutor(RagProperties props) {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
@@ -44,8 +49,10 @@ public class RagAsyncConfig {
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(15);
+        // MDC 透传（design.md §11.1 第 5 项）：traceId 跨 @Async 线程串起来
+        executor.setTaskDecorator(mdcTaskDecorator);
         executor.initialize();
-        log.info("[RAG] 初始化摄取线程池: core={} max={} queue={}",
+        log.info("[RAG] 初始化摄取线程池（with MDC propagation）: core={} max={} queue={}",
                 executor.getCorePoolSize(), executor.getMaxPoolSize(), executor.getQueueCapacity());
         return executor;
     }

@@ -91,7 +91,7 @@
       </el-header>
 
       <!-- ---------- 内容区 ---------- -->
-      <el-main class="layout-main">
+      <el-main class="layout-main" :class="{ 'is-full-height': isFullHeight }">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <component :is="Component" />
@@ -151,6 +151,13 @@ function gotoInbox(): void {
 const collapsed = ref(false)
 
 const activeMenu = computed(() => route.path)
+
+/**
+ * 全屏式页面（如知识库问答）：
+ * 路由 meta.fullHeight = true 时，主区域禁用自己的外层滚动条，
+ * 由页面内部（聊天区）自己管理滚动，避免出现双层滚动条。
+ */
+const isFullHeight = computed(() => route.meta.fullHeight === true)
 const currentTitle = computed(() => (route.meta.title as string | undefined) ?? '')
 
 const displayName = computed(() => userStore.realName || '未登录')
@@ -378,6 +385,12 @@ onBeforeUnmount(() => {
   padding: 0;
   overflow-y: auto;
   background-color: var(--lr-bg-page);
+
+  /* 全屏式页面（聊天）：外层不滚动、不设背景，交给页面自己管理 */
+  &.is-full-height {
+    overflow: hidden;
+    background: #fff;
+  }
 }
 
 .fade-enter-active,

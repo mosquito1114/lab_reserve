@@ -72,13 +72,15 @@ spring:
     encoding: UTF-8
 
   # ------------------------------------------------------------
-  # 文件上传（故障截图，后端中转后转存 OSS）
+  # 文件上传（故障截图 + RAG 文档上传共享 multipart 限制）
   # ------------------------------------------------------------
   servlet:
     multipart:
       enabled: true
-      max-file-size: 5MB
-      max-request-size: 25MB
+      # RAG 摄取（lab-reserve.rag.ingest.max-file-mb）默认 50 MB,
+      # 这里上限设 60 MB, 给 multipart 边界 (boundary + 字段) 留 buffer
+      max-file-size: 60MB
+      max-request-size: 80MB
 
   # ------------------------------------------------------------
   # SMTP 邮件（迭代 3 使用）
@@ -170,12 +172,19 @@ lab-reserve:
     enabled: ${RAG_ENABLED:false}
     # 当 enabled=false 时, SpringAIConfig / QdrantConfig 不会创建 Bean，启动期不调任何外部接口
     # 下面的子块仅在 enabled=true 时才被注入
+    llm:
+      # RAG 自家 Embedding 客户端 (DashScopeHttpEmbeddingClient) 用这个块;
+      # 聊天 ChatModel 仍走 spring.ai.openai.* 启 Spring AI ChatClient
+      base-url:        ${LLM_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key:         ${LLM_API_KEY:}
+      embedding-model: ${LLM_EMBEDDING_MODEL:text-embedding-v3}
+      timeout-seconds: 30
     ingest:
       max-file-mb: 50
       chunk-default: RECURSIVE           # RECURSIVE / QA / FIXED_OVERLAP（与 LangChain/LlamaIndex 对齐）
       chunk-max-chars: 500
       chunk-overlap: 100
-      embed-batch-size: 16
+      embed-batch-size: 10          # DashScope text-embedding-v3 上限 10，别调大
       retry-attempts: 3
       retry-backoff-ms: 1000
     chat:
@@ -184,7 +193,14 @@ lab-reserve:
       queue-wait-timeout-ms: 30000
       max-context-tokens: 8000
       history-window: 6
-      tool-max-loops: 5
+      kb-top-k: 5                # 检索返回条数（与 history-window 无关，别混用）
+      kb-prefetch-factor: 3      # hybrid 每路预取倍数（prefetchK = kb-top-k * 此值）
+      tool-max-loops: 5          # v3 reserved: Tool Call 已取消
+      # R4 三段式相关性门禁（小语料下 cosine 区分度不够，单一阈值分不开）
+      kb-min-score: 0.35         # 兼容字段，等同 kb-reject-score
+      kb-accept-score: 0.60      # dense 分 >= 此值 → 直接放行（不调 LLM 判相关性）
+      kb-reject-score: 0.35      # dense 分 <  此值 → 直接拒
+                                 # 中间灰区 → LLM 判「证据是否足以回答」(见 RelevanceJudge)
     rewrite:
       enabled: true
       timeout-sec: 15

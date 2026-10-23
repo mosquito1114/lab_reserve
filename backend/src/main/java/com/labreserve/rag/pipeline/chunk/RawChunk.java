@@ -3,16 +3,22 @@ package com.labreserve.rag.pipeline.chunk;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.ToString;
+import lombok.experimental.Accessors;
 
 /**
  * 切片后未持久化的内存数据。
  *
  * <p>写库时由 {@link com.labreserve.rag.mapper.RagChunkMapper} 转成
  * {@code tb_rag_chunk} 行；向量化时再用 {@link #content()} 取原文。
+ *
+ * <p>采用 fluent getter（{@code @Accessors(fluent=true)}）：
+ * {@code chunk.content()} / {@code chunk.charStart()} / {@code chunk.charEnd()}，
+ * 与 Java 17 的 record 风格一致，调用方代码更简洁。
  */
 @Getter
 @ToString
 @AllArgsConstructor
+@Accessors(fluent = true)
 public class RawChunk {
 
     /** 切片正文 */

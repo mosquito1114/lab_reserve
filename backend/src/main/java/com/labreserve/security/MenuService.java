@@ -37,7 +37,7 @@ public class MenuService {
             new MenuDef("/profile", "个人中心", "User", null)
     );
 
-    /** 需要权限的分组菜单（迭代 2 系统管理 → 迭代 4 资源管理 → 迭代 3 消息通知） */
+    /** 需要权限的分组菜单（迭代 2 系统管理 → 4 资源管理 → 3 消息通知 → R5 智能问答） */
     private static final List<GroupDef> GROUPS = List.of(
             new GroupDef("/system", "系统管理", "Setting", List.of(
                     new MenuDef("/system/user", "用户管理", "UserFilled", PermissionConst.USER_LIST),
@@ -55,6 +55,12 @@ public class MenuService {
             new GroupDef("/message", "消息通知", "Bell", List.of(
                     new MenuDef("/message/inbox", "消息中心", "ChatDotRound", PermissionConst.MESSAGE_LIST),
                     new MenuDef("/message/delivery-log", "邮件投递记录", "Promotion", PermissionConst.MESSAGE_DELIVERY_LOG)
+            )),
+            // RAG 智能问答（R5）：问答全员可见（rag:chat:query），
+            // 知识库管理仅 LAB_ADMIN / SYS_ADMIN（rag:doc:list）
+            new GroupDef("/rag", "智能问答", "MagicStick", List.of(
+                    new MenuDef("/rag/chat", "知识库问答", "ChatLineSquare", PermissionConst.RAG_CHAT_QUERY),
+                    new MenuDef("/rag/documents", "知识库管理", "Files", PermissionConst.RAG_DOC_LIST)
             ))
     );
 

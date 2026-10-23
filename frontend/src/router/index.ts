@@ -103,6 +103,20 @@ export const routes: RouteRecordRaw[] = [
         name: 'MessageDeliveryLog',
         component: () => import('@/views/message/DeliveryLogView.vue'),
         meta: { title: '邮件投递记录', icon: 'Promotion', permission: 'message:delivery-log' }
+      },
+      // RAG 智能问答（R5）
+      {
+        path: 'rag/chat',
+        name: 'RagChat',
+        component: () => import('@/views/rag/ChatView.vue'),
+        // 全屏式布局：去掉页面内边距，聊天区自己管滚动
+        meta: { title: '知识库问答', icon: 'ChatLineSquare', permission: 'rag:chat:query', fullHeight: true }
+      },
+      {
+        path: 'rag/documents',
+        name: 'RagDocuments',
+        component: () => import('@/views/rag/DocumentView.vue'),
+        meta: { title: '知识库管理', icon: 'Files', permission: 'rag:doc:list' }
       }
       // ↓↓↓ 后续迭代在此按模块追加子路由 ↓↓↓
       // 预约管理：/reservation/apply  /reservation/my  /reservation/audit  /reservation/change-audit

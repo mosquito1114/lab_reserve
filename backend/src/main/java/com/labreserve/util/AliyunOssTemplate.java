@@ -125,6 +125,65 @@ public class AliyunOssTemplate {
         }
     }
 
+    /**
+     * 读对象为输入流（上传文档给 Tika 解析时调用）。
+     *
+     * <p>入参接受两种形态：
+     * <ul>
+     *   <li>完整的可访问 URL（{@code buildUrl()} 形态）—— RAG 文档表存的 URL；</li>
+     *   <li>纯 objectKey（{@code lab-reserve/RAG_DOC/...}）—— 内部调用</li>
+     * </ul>
+     *
+     * <p>返回的流由<b>调用方负责关闭</b>。
+     *
+     * @param url OSS URL 或 objectKey
+     * @return 输入流
+     * @throws BizException 500 OSS 失败 / OSS 未配置
+     */
+    public InputStream openStream(String url) {
+        if (!StringUtils.hasText(url)) {
+            throw BizException.badRequest("OSS 路径不能为空");
+        }
+        if (!properties.isConfigured()) {
+            throw BizException.badRequest("对象存储未配置，请检查 .env 中 OSS_* 变量");
+        }
+        String objectKey = extractObjectKey(url);
+        try {
+            InputStream stream = client().getObject(properties.getBucket(), objectKey).getObjectContent();
+            log.debug("[OSS] 已打开流, objectKey={}", objectKey);
+            return stream;
+        } catch (BizException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("[OSS] 读取失败, url={} (objectKey={})", url, objectKey, e);
+            throw new BizException(500, "OSS 文件读取失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 从完整 URL 反推 objectKey。
+     * <p>支持两种 URL 形态：
+     * <ul>
+     *   <li>{@code https://{bucket}.{endpoint}/{objectKey}}</li>
+     *   <li>{@code https://{customDomain}/{objectKey}}</li>
+     * </ul>
+     * 兜底：把整段视为 objectKey。
+     */
+    private String extractObjectKey(String url) {
+        String prefix = properties.buildUrl("");
+        if (prefix != null && url.startsWith(prefix)) {
+            String suffix = url.substring(prefix.length());
+            return suffix.startsWith("/") ? suffix.substring(1) : suffix;
+        }
+        // 兜底：scheme://host/path → 取 path
+        int schemeEnd = url.indexOf("://");
+        if (schemeEnd < 0) {
+            return url;
+        }
+        int pathStart = url.indexOf('/', schemeEnd + 3);
+        return pathStart >= 0 ? url.substring(pathStart + 1) : url;
+    }
+
     // ------------------------------------------------------------
     // Key 生成
     // ------------------------------------------------------------
