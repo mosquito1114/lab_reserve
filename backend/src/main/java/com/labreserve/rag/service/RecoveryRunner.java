@@ -128,30 +128,13 @@ public class RecoveryRunner {
                         doc.getId(), version, version + 1,
                         doc.getLastErrorStep(), abbreviate(doc.getLastErrorMsg()));
                 // ★ 必须先重置状态再派发：否则链内每个 transitTo 都会因当前态=FAILED 而失败
-                resetForRetry(doc, version + 1);
+                // 显式 SQL 重置（updateById 会跳过 null，错误信息清不掉）
+                docMapper.resetForNewVersion(doc.getId(), version + 1);
                 dispatcher.runChain(doc.getId(), version + 1);
             } catch (Exception e) {
                 log.error("[RAG][RECOVERY] 续跑 docId={} 失败: {}", doc.getId(), e.getMessage());
             }
         }
-    }
-
-    /**
-     * 续跑前把文档重置成"新一轮待执行"的形态，再派发。
-     *
-     * <p>与 {@code RagDocumentService.reingest} 的区别：这里只做最小状态重置，
-     * 不碰文件与切片参数（失败重试应沿用原参数）。
-     */
-    private void resetForRetry(RagDocument doc, int newVersion) {
-        doc.setIngestVersion(newVersion);
-        doc.setPipelineState(RagPipelineState.CREATED.name());
-        doc.setLastErrorStep(null);
-        doc.setLastErrorMsg(null);
-        doc.setLastErrorAt(null);
-        doc.setRawText(null);
-        doc.setCleanText(null);
-        doc.setChunkCount(0);
-        docMapper.updateById(doc);
     }
 
     private static String abbreviate(String s) {

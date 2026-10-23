@@ -178,15 +178,14 @@ public class RagDocumentServiceImpl implements RagDocumentService {
     @Transactional(rollbackFor = Exception.class)
     public void reingest(Long documentId, ReingestDTO dto) {
         RagDocument doc = getDocument(documentId);
-        doc.setIngestVersion(doc.getIngestVersion() + 1);
-        doc.setPipelineState(RagPipelineState.CREATED.name());
-        doc.setLastErrorStep(null);
-        doc.setLastErrorMsg(null);
-        doc.setLastErrorAt(null);
-        doc.setRawText(null);
-        doc.setCleanText(null);
-        doc.setCharCount(0);
-        doc.setChunkCount(0);
+        int newVersion = doc.getIngestVersion() + 1;
+
+        // 先用显式 SQL 把错误信息 / 中间态清成 NULL
+        // （updateById 会跳过 null 字段，setLastErrorStep(null) 不会生成 SET ...=NULL）
+        docMapper.resetForNewVersion(documentId, newVersion);
+
+        // 再读一次最新行，叠加可能被覆盖的可选参数
+        doc = getDocument(documentId);
 
         if (dto.getFileUrl() != null && !dto.getFileUrl().isBlank()) {
             doc.setFileUrl(dto.getFileUrl());

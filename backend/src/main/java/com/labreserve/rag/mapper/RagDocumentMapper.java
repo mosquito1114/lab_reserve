@@ -41,4 +41,24 @@ public interface RagDocumentMapper extends BaseMapper<RagDocument> {
     /** 软启停(业务维度 status=0/1) */
     @Update("UPDATE tb_rag_document SET status=#{status}, updated_at=NOW() WHERE id=#{id}")
     int setBusinessStatus(@Param("id") Long id, @Param("status") Integer status);
+
+    /**
+     * 重置文档到"新一轮 ingest 待执行"的状态。
+     *
+     * <p><b>为什么不能用 {@code updateById} + setXxx(null)</b>：
+     * MyBatis-Plus 的 {@code updateById} <b>默认跳过 null 字段</b>，
+     * 所以 {@code doc.setLastErrorStep(null)} 不会生成 {@code SET last_error_step=NULL}，
+     * 错误信息会残留（R5 联调实测：自动续跑成功后 last_error_step 仍是旧值）。
+     * 这里用显式 SQL 把 null 写下去。
+     *
+     * @param id            文档 ID
+     * @param newVersion    新的 ingest_version
+     */
+    @Update("UPDATE tb_rag_document SET " +
+            "ingest_version=#{newVersion}, pipeline_state='CREATED', " +
+            "last_error_step=NULL, last_error_msg=NULL, last_error_at=NULL, " +
+            "raw_text=NULL, clean_text=NULL, chunk_count=0, ready_at=NULL, " +
+            "updated_at=NOW() " +
+            "WHERE id=#{id}")
+    int resetForNewVersion(@Param("id") Long id, @Param("newVersion") Integer newVersion);
 }
