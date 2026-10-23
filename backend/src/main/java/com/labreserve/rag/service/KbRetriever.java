@@ -9,6 +9,7 @@ import com.labreserve.rag.mapper.RagDocumentMapper;
 import com.labreserve.rag.model.entity.RagChunk;
 import com.labreserve.rag.model.entity.RagDocument;
 import com.labreserve.rag.model.vo.CitationVO;
+import com.labreserve.rag.util.Bm25Encoder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -21,11 +22,14 @@ import java.util.Map;
 /**
  * Step 4 · KbRetriever（知识库检索）。
  *
- * <p>R3 只做 <b>dense 向量检索</b>（RRF / BM25 sparse 融合放 R4，见 rag-design §12.8）。
- * Qdrant 侧只搜 {@code status=1} 的文档，DISABLED 的自然不返回。
+ * <p>R4 起走 <b>Hybrid 双路检索</b>：dense（语义）+ sparse（BM25 关键词），
+ * 由 Qdrant 服务端用 {@code Fusion.RRF} 融合（见 {@code QdrantAdapter.hybridSearch}）。
+ * R3 是单路 dense。
+ *
+ * <p>只搜 {@code status=1}（已启用）的文档，DISABLED 的自然不返回。
  *
  * <h3>未命中硬拒（rag-design §12.6）</h3>
- * Qdrant 返回空 或 top1 分数 &lt; {@code chat.kb-min-score} → 返回空列表，
+ * Qdrant 返回空 或 top1 融合分 &lt; {@code chat.kb-min-score} → 返回空列表，
  * 上层<b>不调 LLM</b>，直接回"未在实验室知识库找到相关说明"。零幻觉。
  *
  * <p>检索结果按 {@code vectorRef}（{@code doc-{id}-v{ver}-{idx}}）反查
@@ -58,7 +62,7 @@ public class KbRetriever {
      * @return 引用列表（按 score 降序）；空列表 = 未命中 → 上层硬拒
      */
     public List<CitationVO> retrieve(String query, int topK) {
-        // ① 把问句 embed 成查询向量
+        // ① 把问句 embed 成查询向量（dense 路）
         float[] queryVector;
         try {
             queryVector = embeddingClient.embed(query);
@@ -67,25 +71,51 @@ public class KbRetriever {
             throw new BizException(500, "查询向量生成失败: " + e.getMessage());
         }
 
-        // ② dense 检索（阈值 0 拿全量，命中判定在上层做，便于统计"最相近的差多少"）
-        List<QdrantAdapter.ScoredChunk> hits = qdrantAdapter.searchDense(
-                qdrantAdapter.collectionName(), queryVector, topK, 0.0d);
+        // ② 同时把问句编码成 BM25 稀疏向量（sparse 路）
+        Bm25Encoder.SparseVector sparse = Bm25Encoder.encode(query);
+
+        // ③ 相关性门禁（在调 LLM 之前先把"库里到底有没有"判掉）
+        //
+        //    ★ 关键设计：RRF 分是**排名分**（1/(60+rank)），量级 ~0.016~0.033，
+        //      它只能表达"谁排前面"，无法表达"是否真的相关"——
+        //      即使库里完全没相关内容，也会有东西排第一拿 0.016 分。
+        //      所以阈值判断必须用 **dense 的 cosine 分**（绝对量，阈值 0.35 有意义），
+        //      RRF 只负责排序（融合），不参与命中判定。
+        double minScore = props.getChat().getKbMinScore();
+
+        //   3.1 dense 语义门禁：cosine >= minScore 才算"语义上相关"
+        List<QdrantAdapter.ScoredChunk> denseGate =
+                qdrantAdapter.searchDense(qdrantAdapter.collectionName(), queryVector, 1, minScore);
+
+        if (denseGate.isEmpty()) {
+            //   3.2 dense 没过门禁 → 用 BM25 兼底（型号/编号/术语类的"字面精确匹配"）
+            //       dense 对这类问句语义分可能很低，但 BM25 能精确命中
+            List<QdrantAdapter.ScoredChunk> sparseGate =
+                    qdrantAdapter.searchSparse(qdrantAdapter.collectionName(),
+                            sparse.indices(), sparse.values(), 1);
+            if (sparseGate.isEmpty()) {
+                log.info("[RAG][KB] 双路均未命中,硬拒: query={} (dense<{}, 无 BM25 命中)",
+                        abbreviate(query), minScore);
+                return List.of();
+            }
+            log.info("[RAG][KB] dense 未过门禁但 BM25 命中，继续走 hybrid: query={} sparseScore={}",
+                    abbreviate(query), round(sparseGate.get(0).score()));
+        }
+
+        // ④ Hybrid 排序：dense + sparse 双路 → Qdrant 服务端 RRF 融合
+        //    prefetchK 取 topK 的 3 倍，给 RRF 足够候选（只取 topK 会让融合退化为单路）
+        int prefetchK = topK * 3;
+        List<QdrantAdapter.ScoredChunk> hits = qdrantAdapter.hybridSearch(
+                qdrantAdapter.collectionName(), queryVector,
+                sparse.indices(), sparse.values(), topK, prefetchK);
 
         if (hits.isEmpty()) {
-            log.info("[RAG][KB] 未命中任何 chunk: query={}", abbreviate(query));
+            log.info("[RAG][KB] hybrid 返回空: query={} sparseTerms={}",
+                    abbreviate(query), sparse.size());
             return List.of();
         }
 
-        // ③ 硬拒判定：top1 分数低于阈值 → 视为未命中（零幻觉）
-        double minScore = props.getChat().getKbMinScore();
-        double top1 = hits.get(0).score();
-        if (top1 < minScore) {
-            log.info("[RAG][KB] top1 分数 {} < 阈值 {}，判定未命中: query={}",
-                    round(top1), minScore, abbreviate(query));
-            return List.of();
-        }
-
-        // ④ 反查 chunk 原文 + document 标题 → 组装引用
+        // ⑤ 反查 chunk 原文 + document 标题 → 组装引用
         return toCitations(hits);
     }
 

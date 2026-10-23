@@ -7,6 +7,7 @@ import com.labreserve.rag.enums.StepCode;
 import com.labreserve.rag.mapper.RagChunkMapper;
 import com.labreserve.rag.model.entity.RagChunk;
 import com.labreserve.rag.model.entity.RagDocument;
+import com.labreserve.rag.util.Bm25Encoder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -108,7 +109,11 @@ public class UpsertStep extends AbstractPipelineStep {
             payload.put("source_type", doc.getSourceType());
             payload.put("status", doc.getStatus() == null ? 0 : doc.getStatus());
 
-            jobs.add(new QdrantAdapter.PointsUpsertJob(pointId, vec, payload));
+            // sparse（BM25）: 对切片正文编码，服务端用 Idf 修饰子加权
+            var sparse = Bm25Encoder.encode(c.getContent());
+
+            jobs.add(new QdrantAdapter.PointsUpsertJob(pointId, vec,
+                    sparse.indices(), sparse.values(), payload));
         }
 
         // 3. 推 Qdrant
@@ -120,12 +125,13 @@ public class UpsertStep extends AbstractPipelineStep {
             chunkMapper.updateById(c);
         }
 
-        log.info("[RAG][UPSERT] 完成 docId={} v={} chunks={} collection={}",
+        log.info("[RAG][UPSERT] 完成 docId={} v={} chunks={} collection={} (dense+sparse)",
                 doc.getId(), ctx.ingestVersion(), chunks.size(), collection);
 
         return StepResult.ok()
                 .put("collection", collection)
                 .put("chunkCount", chunks.size())
-                .put("vectorSize", chunks.get(0).getVectorBlob().length / 4);
+                .put("vectorSize", chunks.get(0).getVectorBlob().length / 4)
+                .put("hybrid", true);
     }
 }

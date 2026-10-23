@@ -106,9 +106,17 @@ public class QdrantAdapter {
                     .putAllMap(java.util.Map.of("dense", denseParams))
                     .build();
 
-            // sparse named vector: "sparse" (BM25 索引, R3 QUERY 端消费)
+            // sparse named vector: "sparse" (BM25, R4 混合检索用)
             // Qdrant 1.x 的 sparse 配置位于 sparseVectorsConfig,不在 named vectors 里
-            Collections.SparseVectorParams sparseParams = Collections.SparseVectorParams.newBuilder().build();
+            // index.fullScanThreshold: 文档数低于此值走全量扫描(快), 高于则建倒排索引
+            // modifier = Idf: 由 Qdrant 用自身语料统计 IDF, 检索时自动加权
+            Collections.SparseVectorParams sparseParams = Collections.SparseVectorParams.newBuilder()
+                    .setIndex(Collections.SparseIndexConfig.newBuilder()
+                            .setFullScanThreshold(10_000L)
+                            .setOnDisk(false)
+                            .build())
+                    .setModifier(Collections.Modifier.Idf)
+                    .build();
             Collections.SparseVectorConfig sparseConfig = Collections.SparseVectorConfig.newBuilder()
                     .putAllMap(java.util.Map.of("sparse", sparseParams))
                     .build();
@@ -199,6 +207,149 @@ public class QdrantAdapter {
         } catch (Exception e) {
             log.warn("[RAG][Qdrant] deleteByDocVersion 失败 collection={} docId={} v={} err={}",
                     collection, documentId, ingestVersion, e.getMessage());
+        }
+    }
+
+    /**
+     * Hybrid 检索：dense（语义）+ sparse（BM25）双路，Qdrant 服务端用 RRF 融合。
+     *
+     * <p><b>为什么要 Hybrid</b>：
+     * <ul>
+     *   <li>dense 擅长语义（问“转速上限”能命中写“最大转速”的文档）</li>
+     *   <li>sparse/BM25 擅长关键词精确匹配（型号、参数、术语一字不差）</li>
+     *   <li>两者互补，RRF（Reciprocal Rank Fusion）按<b>排名</b>融合，
+     *       不需要归一化两路分数量纲，这是它相对加权求和的关键优势</li>
+     * </ul>
+     *
+     * <p>融合在 <b>Qdrant 服务端</b>完成（{@code Fusion.RRF}），避免客户端实现 RRF。
+     *
+     * @param collection     集合名
+     * @param denseVector    查询向量
+     * @param sparseIndices  BM25 查询词项下标
+     * @param sparseValues   BM25 查询词项权重
+     * @param topK           最终返回条数
+     * @param prefetchK      每路的预取条数（建议 ≥ topK，给 RRF 足够候选）
+     * @return 命中点（含 payload），按融合分降序
+     */
+    public List<ScoredChunk> hybridSearch(String collection,
+                                         float[] denseVector,
+                                         int[] sparseIndices,
+                                         float[] sparseValues,
+                                         int topK, int prefetchK) {
+        try {
+            Points.PrefetchQuery.Builder densePf = Points.PrefetchQuery.newBuilder()
+                    .setUsing("dense")
+                    .setLimit(prefetchK)
+                    .setFilter(enabledDocsFilter());
+
+            Points.Query denseQ = Points.Query.newBuilder()
+                    .setNearest(Points.VectorInput.newBuilder()
+                            .setDense(Points.DenseVector.newBuilder()
+                                    .addAllData(com.google.common.primitives.Floats.asList(denseVector))
+                                    .build())
+                            .build())
+                    .build();
+            densePf.setQuery(denseQ);
+
+            Points.PrefetchQuery.Builder sparsePf = Points.PrefetchQuery.newBuilder()
+                    .setUsing("sparse")
+                    .setLimit(prefetchK)
+                    .setFilter(enabledDocsFilter());
+            if (sparseIndices != null && sparseIndices.length > 0) {
+                Points.SparseVector.Builder sv = Points.SparseVector.newBuilder();
+                for (int i = 0; i < sparseIndices.length; i++) {
+                    sv.addIndices(sparseIndices[i]);
+                    sv.addValues(sparseValues[i]);
+                }
+                sparsePf.setQuery(Points.Query.newBuilder()
+                        .setNearest(Points.VectorInput.newBuilder()
+                                .setSparse(sv.build())
+                                .build())
+                        .build());
+            }
+
+            Points.QueryPoints request = Points.QueryPoints.newBuilder()
+                    .setCollectionName(collection)
+                    .addPrefetch(densePf.build())
+                    .addPrefetch(sparsePf.build())
+                    .setQuery(Points.Query.newBuilder()
+                            .setFusion(Points.Fusion.RRF)
+                            .build())
+                    .setLimit(topK)
+                    .setWithPayload(Points.WithPayloadSelector.newBuilder().setEnable(true).build())
+                    .build();
+
+            List<Points.ScoredPoint> results = await(
+                    client.queryAsync(request, Duration.ofSeconds(30)), Duration.ofSeconds(45));
+
+            List<ScoredChunk> out = new ArrayList<>(results.size());
+            for (Points.ScoredPoint sp : results) {
+                Map<String, Object> payload = new HashMap<>();
+                sp.getPayloadMap().forEach((k, v) -> payload.put(k, fromJsonValue(v)));
+                out.add(new ScoredChunk(sp.getId().getUuid(), sp.getScore(), payload));
+            }
+            log.debug("[RAG][Qdrant] hybrid 检索: collection={} topK={} prefetchK={} 命中={}",
+                    collection, topK, prefetchK, out.size());
+            return out;
+        } catch (Exception e) {
+            throw new BizException(500, "Qdrant hybrid 检索失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 纯 sparse（BM25）检索。
+     *
+     * <p>用途：给 {@link KbRetriever} 做"dense 门禁失败时的关键词兼底"——
+     * 问句包含只可能被字面匹配的型号/编号时（如 "LAB-99 容量"），
+     * dense 可能语义分很低，但 BM25 能精确命中。
+     *
+     * @param collection    集合名
+     * @param sparseIndices BM25 词项下标
+     * @param sparseValues  BM25 词项权重
+     * @param limit         返回条数
+     */
+    public List<ScoredChunk> searchSparse(String collection,
+                                          int[] sparseIndices,
+                                          float[] sparseValues,
+                                          int limit) {
+        if (sparseIndices == null || sparseIndices.length == 0) {
+            return List.of();
+        }
+        try {
+            Points.SparseVector.Builder sv = Points.SparseVector.newBuilder();
+            for (int i = 0; i < sparseIndices.length; i++) {
+                sv.addIndices(sparseIndices[i]);
+                sv.addValues(sparseValues[i]);
+            }
+
+            Points.QueryPoints request = Points.QueryPoints.newBuilder()
+                    .setCollectionName(collection)
+                    .setQuery(Points.Query.newBuilder()
+                            .setNearest(Points.VectorInput.newBuilder()
+                                    .setSparse(sv.build())
+                                    .build())
+                            .build())
+                    .setUsing("sparse")
+                    .setLimit(limit)
+                    .setFilter(enabledDocsFilter())
+                    .setWithPayload(Points.WithPayloadSelector.newBuilder().setEnable(true).build())
+                    .build();
+
+            List<Points.ScoredPoint> results = await(
+                    client.queryAsync(request, Duration.ofSeconds(20)), Duration.ofSeconds(30));
+
+            List<ScoredChunk> out = new ArrayList<>(results.size());
+            for (Points.ScoredPoint sp : results) {
+                Map<String, Object> payload = new HashMap<>();
+                sp.getPayloadMap().forEach((k, v) -> payload.put(k, fromJsonValue(v)));
+                out.add(new ScoredChunk(sp.getId().getUuid(), sp.getScore(), payload));
+            }
+            log.debug("[RAG][Qdrant] sparse 检索: 命中={}", out.size());
+            return out;
+        } catch (Exception e) {
+            // 兼底路线失败不应中断主链，降级为空结果
+            log.warn("[RAG][Qdrant] sparse 检索失败: {}", e.getMessage());
+            return List.of();
         }
     }
 
@@ -398,12 +549,29 @@ public class QdrantAdapter {
     public record PointsUpsertJob(
             UUID pointId,
             float[] denseVector,
+            int[] sparseIndices,
+            float[] sparseValues,
             Map<String, Object> payload
     ) {
+        /** 只写 dense 的便捷构造（R2 兼容路径） */
+        public static PointsUpsertJob denseOnly(UUID pointId, float[] dense, Map<String, Object> payload) {
+            return new PointsUpsertJob(pointId, dense, null, null, payload);
+        }
+
         public Points.PointStruct toPointStruct() {
             Map<String, Points.Vector> vectors = new HashMap<>();
             vectors.put("dense", VectorFactory.vector(denseVector));
-            // sparse 暂不写,R3 QUERY 时再补(否则需要在本服务做 BM25 encoder)
+
+            // sparse（BM25）：indices 是 u32 词项下标，values 是 tf 权重
+            // IDF 由 Qdrant 服务端算（collection 声明 modifier=Idf）
+            if (sparseIndices != null && sparseIndices.length > 0) {
+                Points.SparseVector.Builder sv = Points.SparseVector.newBuilder();
+                for (int i = 0; i < sparseIndices.length; i++) {
+                    sv.addIndices(sparseIndices[i]);
+                    sv.addValues(sparseValues[i]);
+                }
+                vectors.put("sparse", Points.Vector.newBuilder().setSparse(sv.build()).build());
+            }
 
             // payload: 统一转成 JsonWithInt.Value
             Map<String, JsonWithInt.Value> payloadValues = new HashMap<>();
