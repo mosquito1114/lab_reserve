@@ -17,6 +17,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -121,14 +124,27 @@ public class DashScopeChatModel implements ChatModel {
                 URI uri = URI.create(base() + "/chat/completions");
                 HttpRequest req = buildRequest(uri, messages, true);
 
-                HttpResponse<Stream<String>> resp = httpClient.send(
-                        req, HttpResponse.BodyHandlers.ofLines());
+                // ★ 必须用 ofInputStream 而不是 ofLines：
+                //   BodyHandlers.ofLines() 的 BodySubscriber 要等【整个响应体收完】才完成，
+                //   httpClient.send() 因此会阻塞到最后一刻，所有行一次性拿到 ——
+                //   上层看起来就是"不流式"（实测：18 个 chunk 全在 +4464ms 同一瞬间到达）。
+                //   ofInputStream 则在响应头到达后立即返回，读的时候才阻塞，
+                //   配合 BufferedReader.lines() 就能逐行渐进。
+                HttpResponse<InputStream> resp = httpClient.send(
+                        req, HttpResponse.BodyHandlers.ofInputStream());
+
                 if (resp.statusCode() != 200) {
-                    return Flux.error(new BizException(500,
-                            "DashScope chat stream 失败: HTTP " + resp.statusCode()));
+                    String errBody = readAllQuietly(resp.body());
+                    return Flux.<ChatResponse>error(new BizException(500,
+                            "DashScope chat stream 失败: HTTP " + resp.statusCode()
+                                    + " body=" + truncate(errBody, 300)));
                 }
 
-                return Flux.fromStream(resp.body())
+                BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(resp.body(), StandardCharsets.UTF_8));
+
+                // reader.lines() 是惰性 Stream，Flux.fromStream 按需求拉取 → 真正逐行
+                return Flux.fromStream(reader.lines())
                         .map(String::trim)
                         .filter(line -> line.startsWith("data:"))
                         .map(line -> line.substring("data:".length()).trim())
@@ -147,6 +163,8 @@ public class DashScopeChatModel implements ChatModel {
                                 log.debug("[RAG][ChatModel] stream chunk 解析失败: {}", e.getMessage());
                             }
                         })
+                        // 流结束/取消/异常时关闭底层连接，避免连接泄漏
+                        .doFinally(sig -> closeQuietly(reader))
                         .onErrorResume(e -> {
                             log.error("[RAG][ChatModel] stream 异常: {}", e.getMessage());
                             return Flux.<ChatResponse>error(
@@ -159,6 +177,23 @@ public class DashScopeChatModel implements ChatModel {
                         new BizException(500, "chat stream 连接失败: " + e.getMessage()));
             }
         });
+    }
+
+    /** 读完整个响应体（仅用于错误分支，体积小） */
+    private static String readAllQuietly(InputStream in) {
+        try (in) {
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static void closeQuietly(java.io.Closeable c) {
+        try {
+            c.close();
+        } catch (Exception ignored) {
+            // 已关闭 / 连接断开，忽略
+        }
     }
 
     // ============================================================

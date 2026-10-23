@@ -42,12 +42,21 @@ public class RagSession implements Serializable {
     private String summary;
 
     /** 摘要覆盖到的最大 message_id；R3 只读不写 */
+    @com.baomidou.mybatisplus.annotation.TableField("summary_upto")
     private Long summaryUpTo;
 
     /** 最近 N 轮累计 token，超 {@code chat.max-context-tokens} 触发压缩（R3 只统计） */
     private Integer lastTokenWindow;
 
     private LocalDateTime lastMessageAt;
+
+    /**
+     * 1 正常 / 0 已删除（软删除）。
+     *
+     * <p>用户删会话只是把 status 置 0，消息行保留用于审计与统计；
+     * 所有列表 / 详情查询都必须过滤 {@code status = 1}。
+     */
+    private Integer status;
 
     /** 数据库 DEFAULT CURRENT_TIMESTAMP 维护 */
     private LocalDateTime createdAt;

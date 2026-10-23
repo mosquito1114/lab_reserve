@@ -22,9 +22,20 @@ public interface RagSessionMapper extends BaseMapper<RagSession> {
      *
      * <p>用作侧边栏"我的会话列表"。
      */
-    @Select("SELECT * FROM tb_rag_session WHERE user_id = #{userId} " +
+    @Select("SELECT * FROM tb_rag_session WHERE user_id = #{userId} AND status = 1 " +
             "ORDER BY last_message_at DESC LIMIT #{limit}")
     List<RagSession> listRecentByUser(@Param("userId") Long userId, @Param("limit") int limit);
+
+    /**
+     * 软删除会话（status 置 0）。
+     *
+     * <p>消息不删，保留用于审计与用量统计。
+     * 用显式 SQL 而不是 updateById：后者会跳过 null 字段，
+     * 且这里只想动 status 与时间戳，不希望带上其它字段。
+     */
+    @Update("UPDATE tb_rag_session SET status = 0, updated_at = NOW() " +
+            "WHERE id = #{sessionId} AND user_id = #{userId} AND status = 1")
+    int softDelete(@Param("sessionId") Long sessionId, @Param("userId") Long userId);
 
     /** 消息数 +1，并刷新 {@code last_message_at}（每次落消息都调） */
     @Update("UPDATE tb_rag_session SET message_count = message_count + 1, " +

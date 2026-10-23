@@ -79,14 +79,14 @@ public class RagChatHistoryServiceImpl implements RagChatHistoryService {
         Long userId = requireUser();
         requireOwnership(sessionId, userId);
 
-        // 逻辑删除：消息保留用于审计（需求：日志只增不改不删）
-        RagSession s = sessionMapper.selectById(sessionId);
-        if (s != null) {
-            s.setTitle("[已删除] " + (s.getTitle() == null ? "" : s.getTitle()));
-            s.setLastMessageAt(LocalDateTime.now());
-            sessionMapper.updateById(s);
+        // 软删除：status 置 0，会话立即从列表消失、也不再可打开。
+        // 消息行保留（审计 + 用量统计），不做物理删除。
+        int affected = sessionMapper.softDelete(sessionId, userId);
+        if (affected == 0) {
+            // 并发场景：已被别处删掉 / 不属于当前用户
+            throw BizException.notFound("会话不存在或已删除");
         }
-        log.info("[RAG][CHAT] 用户 {} 删除会话 {}", userId, sessionId);
+        log.info("[RAG][CHAT] 用户 {} 删除会话 {}（软删除）", userId, sessionId);
     }
 
     @Override
@@ -110,10 +110,17 @@ public class RagChatHistoryServiceImpl implements RagChatHistoryService {
         return userId;
     }
 
-    /** 校验会话属于当前用户 */
+    /**
+     * 校验会话存在、未删除、且属于当前用户。
+     *
+     * <p>已删除的会话按"不存在"处理（404），
+     * 避免用户通过手改 id 打开自己删掉的会话。
+     */
     private void requireOwnership(Long sessionId, Long userId) {
         RagSession s = sessionId == null ? null : sessionMapper.selectById(sessionId);
-        BizException.requireFound(s, "会话不存在");
+        if (s == null || Integer.valueOf(0).equals(s.getStatus())) {
+            throw BizException.notFound("会话不存在");
+        }
         if (!userId.equals(s.getUserId())) {
             throw BizException.forbidden("无权访问该会话");
         }

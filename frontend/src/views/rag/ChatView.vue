@@ -93,29 +93,35 @@
                 <span /><span /><span />
               </div>
 
-              <!-- 引用来源 -->
+              <!-- 引用来源：默认收起，只显示名称；点标题栏展开 -->
               <div v-if="msg.citations && msg.citations.length" class="cite-block">
-                <div class="cite-head">
-                  <el-icon><Link /></el-icon>
-                  引用来源（{{ msg.citations.length }}）
+                <div class="cite-head" @click="msg.citesOpen = !msg.citesOpen">
+                  <el-icon class="cite-caret" :class="{ open: msg.citesOpen }">
+                    <ArrowRight />
+                  </el-icon>
+                  <span class="cite-head-text">引用来源 {{ msg.citations.length }} 条</span>
+                  <!-- 收起时用一行标题预览，让用户不展开也知道引了哪些文档 -->
+                  <span class="cite-preview">{{ msg.citations.map((c) => c.title).join(' · ') }}</span>
                 </div>
-                <div
-                  v-for="c in msg.citations"
-                  :key="c.index"
-                  class="cite-item"
-                  :class="{ highlight: msg.activeCite === c.index }"
-                  :data-cite-ref="`${msg.key}-${c.index}`"
-                >
-                  <div class="cite-item-head">
+
+                <div v-show="msg.citesOpen" class="cite-list">
+                  <div
+                    v-for="c in msg.citations"
+                    :key="c.index"
+                    class="cite-row"
+                    :class="{ highlight: msg.activeCite === c.index }"
+                    :data-cite-ref="`${msg.key}-${c.index}`"
+                  >
                     <span class="cite-index">{{ c.index }}</span>
                     <span class="cite-title">{{ c.title || '未命名文档' }}</span>
-                    <el-tag size="small" effect="plain">{{ categoryLabel(c.category) }}</el-tag>
-                    <span class="cite-score">相似度 {{ (c.score ?? 0).toFixed(3) }}</span>
-                  </div>
-                  <p class="cite-snippet">{{ c.snippet }}</p>
-                  <div class="cite-trace">
-                    <span>切片 #{{ c.chunkId }}</span>
-                    <span v-if="c.vectorRef" class="text-secondary">向量 {{ c.vectorRef }}</span>
+                    <el-tag size="small" effect="plain" class="cite-cat">
+                      {{ categoryLabel(c.category) }}
+                    </el-tag>
+                    <span class="cite-score">{{ (c.score ?? 0).toFixed(2) }}</span>
+                    <!-- 片段放 tooltip 里，正文区不再占地方 -->
+                    <el-tooltip :content="c.snippet || '（无片段）'" placement="top" :show-after="200">
+                      <el-icon class="cite-info"><InfoFilled /></el-icon>
+                    </el-tooltip>
                   </div>
                 </div>
               </div>
@@ -188,14 +194,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  ArrowRight,
   ChatLineSquare,
   CloseBold,
   CopyDocument,
   Delete,
-  Link,
+  InfoFilled,
+  Loading,
   Plus,
   Promotion,
   Refresh,
@@ -229,8 +237,21 @@ const SUGGESTIONS = [
   '实验室发生火警怎么办'
 ]
 
-/** 流式渲染节流间隔（ms）：LLM 输出很快，逐 chunk 触发响应式会掉帧 */
-const RENDER_THROTTLE_MS = 60
+/**
+ * 打字机参数。
+ *
+ * <p>为什么需要：后端 LLM 的 chunk 本身就是「一块一块」的
+ * （实测 199 字只有 18 个 chunk，平均每块约 11 字），
+ * 前端如果原样追加，视觉上就是"整块跳出"，不像打字机。
+ *
+ * <p>做法：收到的文字先进 queue，再由定时泵按固定节奏逐字吐到 content，
+ * 末速与到达速度解耦，观感稳定。
+ */
+const TYPE_TICK_MS = 24
+/** 每 tick 吐几个字（约 3 字/24ms ≈ 125 字/秒） */
+const TYPE_CHARS_PER_TICK = 3
+/** 积压超过这个长度就加速（避免长回答越拖越久） */
+const TYPE_BACKLOG_FAST = 160
 
 // ============================================================
 // 状态
@@ -252,7 +273,20 @@ interface UiMessage {
   messageId: number | null
   feedback: number | null
   costMs: number | null
+  /** 流是否还在进行（后端没发 DONE） */
   pending: boolean
+  /**
+   * 阶段：
+   *   retrieving —— 已发出问题，等待首个正文 chunk（检索 + 意图 + 判相关性）
+   *   generating —— 正在吐字
+   */
+  phase: 'retrieving' | 'generating'
+  /** 待吐出的文字缓冲（打字机泵从中取字） */
+  queue: string
+  /** 后端流是否已结束（结束后泵把残余吐完就收工） */
+  streamEnded: boolean
+  /** 引用来源是否展开（默认收起，点击标题栏展开） */
+  citesOpen?: boolean
   /** 当前高亮的引用编号（点击角标时设置） */
   activeCite: number | null
 }
@@ -276,39 +310,70 @@ const currentSession = computed(() =>
 // ============================================================
 
 let abortCtrl: AbortController | null = null
-/** 节流：累积待渲染文本，定时刷一次 */
-let renderTimer: number | undefined
-let pendingText = ''
 /** 上一次提问（用于「重试」） */
 let lastQuestion = ''
 
-const throttledTarget = shallowRef<UiMessage | null>(null)
+/** 打字机泵：key → 消息（只放还没吐完的） */
+const typingTargets = new Map<string, UiMessage>()
+let typeTimer: number | undefined
 
-function scheduleRender(msg: UiMessage, chunk: string): void {
-  pendingText += chunk
-  throttledTarget.value = msg
-  if (renderTimer != null) return
-  renderTimer = window.setTimeout(() => {
-    renderTimer = undefined
-    const target = throttledTarget.value
-    if (target && pendingText) {
-      target.content += pendingText
-      pendingText = ''
-      scrollToBottom()
-    }
-  }, RENDER_THROTTLE_MS)
+/** 把一段增量放进该消息的待吐队列，并确保泵在跑 */
+function enqueueText(msg: UiMessage, chunk: string): void {
+  msg.queue += chunk
+  typingTargets.set(msg.key, msg)
+  if (typeTimer == null) {
+    typeTimer = window.setInterval(typeTick, TYPE_TICK_MS)
+  }
 }
 
-function flushRender(): void {
-  if (renderTimer != null) {
-    window.clearTimeout(renderTimer)
-    renderTimer = undefined
+/** 泵的一拍：从各消息队列里取字吐到 content */
+function typeTick(): void {
+  if (typingTargets.size === 0) {
+    stopTyping()
+    return
   }
-  const target = throttledTarget.value
-  if (target && pendingText) {
-    target.content += pendingText
-    pendingText = ''
+
+  let painted = false
+  for (const msg of typingTargets.values()) {
+    if (msg.queue.length > 0) {
+      // 积压多时加速，避免长回答尾段拖太久
+      const speed = msg.queue.length > TYPE_BACKLOG_FAST
+        ? TYPE_CHARS_PER_TICK * 4
+        : TYPE_CHARS_PER_TICK
+      const take = Math.min(speed, msg.queue.length)
+      msg.content += msg.queue.slice(0, take)
+      msg.queue = msg.queue.slice(take)
+      // 首个字出现 → 退出「检索中」阶段
+      if (msg.phase === 'retrieving') msg.phase = 'generating'
+      painted = true
+    } else if (msg.streamEnded) {
+      // 队列空了且流已结束 → 这条消息收工
+      typingTargets.delete(msg.key)
+      msg.pending = false
+      painted = true
+    }
   }
+
+  if (painted) scrollToBottom()
+  if (typingTargets.size === 0) stopTyping()
+}
+
+function stopTyping(): void {
+  if (typeTimer != null) {
+    window.clearInterval(typeTimer)
+    typeTimer = undefined
+  }
+}
+
+/** 立即把队列吐完（用于「停止生成」或出错，避免卡一半） */
+function flushTyping(msg: UiMessage): void {
+  if (msg.queue) {
+    msg.content += msg.queue
+    msg.queue = ''
+  }
+  msg.streamEnded = true
+  msg.pending = false
+  typingTargets.delete(msg.key)
 }
 
 // ============================================================
@@ -331,6 +396,8 @@ function renderAi(msg: UiMessage): string {
 function onBodyClick(evt: MouseEvent, msg: UiMessage): void {
   const idx = readCiteIndex(evt.target)
   if (idx == null) return
+  // 点了角标却看不到引用行，体验很怪 —— 自动展开
+  if (!msg.citesOpen) msg.citesOpen = true
   msg.activeCite = idx
   void nextTick(() => {
     const el = document.querySelector(`[data-cite-ref="${msg.key}-${idx}"]`)
@@ -422,6 +489,10 @@ async function switchSession(id: number): Promise<void> {
         feedback: r.feedback,
         costMs: r.costMs,
         pending: false,
+        phase: 'generating' as const,
+        queue: '',
+        streamEnded: true,
+        citesOpen: false,
         activeCite: null
       }))
     scrollToBottom(true)
@@ -512,11 +583,14 @@ async function send(): Promise<void> {
     feedback: null,
     costMs: null,
     pending: false,
+    phase: 'generating' as const,
+    queue: '',
+    streamEnded: true,
     activeCite: null
   })
 
   // AI 气泡（占位，流式填充）
-  const aiMsg: UiMessage = {
+  messages.value.push({
     key: `a-${Date.now()}`,
     role: 'ASSISTANT',
     content: '',
@@ -525,9 +599,19 @@ async function send(): Promise<void> {
     feedback: null,
     costMs: null,
     pending: true,
+    // 此时后端正在 意图识别 → 检索 → 相关性判定 → 调 LLM，尚无正文
+    phase: 'retrieving',
+    queue: '',
+    streamEnded: false,
+    citesOpen: false,
     activeCite: null
-  }
-  messages.value.push(aiMsg)
+  })
+
+  // ★ 关键：必须取 push 之后的**响应式代理**，不能用 push 进去的原始对象。
+  //   messages 是 ref([])，push 的是裸对象；闭包里继续改裸对象会绕过 Vue 的 Proxy，
+  //   视图不会更新 —— 现象就是"一直在加载，只有再发一条消息（数组变更触发整体重渲染）
+  //   才把之前累积的正文一次性刷出来"，而不是打字机效果。
+  const aiMsg = messages.value[messages.value.length - 1]!
   scrollToBottom(true)
 
   abortCtrl = new AbortController()
@@ -541,14 +625,19 @@ async function send(): Promise<void> {
     )
   } catch (e) {
     if ((e as Error).name === 'AbortError') {
-      flushRender()
+      flushTyping(aiMsg)
       aiMsg.content += aiMsg.content ? '\n\n（已停止生成）' : '（已停止生成）'
     } else {
+      flushTyping(aiMsg)
       lastError.value = e instanceof Error ? e.message : '请求失败'
     }
   } finally {
-    flushRender()
-    aiMsg.pending = false
+    // 流结束：让泵把残余吐完再收工（不直接置 pending=false，
+    // 否则会丢掉队列里还没打出来的字）
+    aiMsg.streamEnded = true
+    if (abortCtrl?.signal.aborted) {
+      flushTyping(aiMsg)
+    }
     sending.value = false
     abortCtrl = null
     // 会话可能是新建的（后端返回的 messageId 才带 sessionId），统一刷新一次列表
@@ -560,17 +649,16 @@ async function send(): Promise<void> {
 function handleEvent(evt: RagStreamItem, aiMsg: UiMessage): void {
   switch (evt.kind) {
     case 'CHUNK':
-      if (evt.delta) scheduleRender(aiMsg, evt.delta)
+      // 进队列，由打字机泵匀速吐出（不直接写 content）
+      if (evt.delta) enqueueText(aiMsg, evt.delta)
       break
 
     case 'CITATION':
-      flushRender()
       aiMsg.citations = evt.citations ?? []
       break
 
     case 'MESSAGE':
       // 后端在 MESSAGE 里也带 citations（与 CITATION 重复，取一次即可）
-      flushRender()
       if (evt.citations?.length) aiMsg.citations = evt.citations
       aiMsg.messageId = evt.messageId ?? null
       aiMsg.costMs = evt.costMs ?? null
@@ -585,8 +673,7 @@ function handleEvent(evt: RagStreamItem, aiMsg: UiMessage): void {
       break
 
     case 'DONE':
-      flushRender()
-      aiMsg.pending = false
+      aiMsg.streamEnded = true
       break
   }
 }
@@ -651,7 +738,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (renderTimer != null) window.clearTimeout(renderTimer)
+  stopTyping()
   abortCtrl?.abort()
 })
 </script>
@@ -931,6 +1018,41 @@ onBeforeUnmount(() => {
   }
 }
 
+/* ---------- 检索中提示 ---------- */
+.retrieving {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--lr-text-secondary);
+  background: #f5f7fa;
+  border: 1px solid #ebeef5;
+  border-radius: var(--lr-radius);
+}
+
+/* ---------- 打字光标 ---------- */
+.type-caret {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  margin-left: 2px;
+  vertical-align: -2px;
+  background: var(--lr-primary);
+  animation: caret-blink 1s steps(2, start) infinite;
+}
+
+@keyframes caret-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
 /* ---------- 打字动画 ---------- */
 .typing {
   display: flex;
@@ -968,9 +1090,9 @@ onBeforeUnmount(() => {
   }
 }
 
-/* ---------- 引用 ---------- */
+/* ---------- 引用（默认收起，只占一行） ---------- */
 .cite-block {
-  margin-top: 10px;
+  margin-top: 8px;
   overflow: hidden;
   border: 1px solid #ebeef5;
   border-radius: var(--lr-radius);
@@ -980,17 +1102,56 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 6px;
   align-items: center;
-  padding: 8px 12px;
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  background: #fafbfc;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #f2f4f7;
+  }
+}
+
+.cite-caret {
+  font-size: 12px;
+  color: var(--lr-text-secondary);
+  transition: transform 0.18s;
+
+  &.open {
+    transform: rotate(90deg);
+  }
+}
+
+.cite-head-text {
+  flex: 0 0 auto;
   font-size: 12px;
   font-weight: 600;
   color: var(--lr-text-regular);
-  background: #fafafa;
-  border-bottom: 1px solid #ebeef5;
 }
 
-.cite-item {
-  padding: 10px 12px;
-  border-bottom: 1px solid #f2f3f5;
+/* 收起状态下的文档名预览：单行省略，不占高度 */
+.cite-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--lr-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cite-list {
+  border-top: 1px solid #f2f3f5;
+}
+
+.cite-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid #f7f8fa;
   transition: background 0.25s;
 
   &:last-child {
@@ -1002,20 +1163,12 @@ onBeforeUnmount(() => {
   }
 }
 
-.cite-item-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-
 .cite-index {
-  display: inline-block;
-  width: 18px;
-  height: 18px;
-  font-size: 11px;
-  line-height: 18px;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
+  line-height: 16px;
   color: #fff;
   text-align: center;
   background: var(--lr-primary);
@@ -1023,34 +1176,33 @@ onBeforeUnmount(() => {
 }
 
 .cite-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--lr-text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--lr-text-regular);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cite-cat {
+  flex: 0 0 auto;
+  transform: scale(0.9);
 }
 
 .cite-score {
-  margin-left: auto;
-  font-size: 12px;
+  flex: 0 0 auto;
+  font-family: Consolas, Monaco, monospace;
   color: var(--lr-text-secondary);
 }
 
-.cite-snippet {
-  margin: 0;
-  overflow: hidden;
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--lr-text-regular);
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
-
-.cite-trace {
-  display: flex;
-  gap: 12px;
-  margin-top: 6px;
-  font-size: 11px;
+.cite-info {
+  flex: 0 0 auto;
   color: var(--lr-text-secondary);
+  cursor: help;
+
+  &:hover {
+    color: var(--lr-primary);
+  }
 }
 
 /* ---------- 操作条 ---------- */

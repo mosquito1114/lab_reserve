@@ -89,23 +89,50 @@ public class RagChatController {
         }
 
         StreamingResponseBody body = outputStream -> {
+            // ★ 不能用 flux.toIterable()：它在 subscribe() 时以无界请求**同步抽干**整条流
+            //   （reader.readLine() 就在当前线程阻塞），抽完才交给迭代器，
+            //   于是客户端看到的是"攒好的一坨"，完全失去流式效果。
+            //   这里用显式队列：订阅异步进行，写入线程按到达顺序逐事件取、写、flush。
+            final Object END = new Object();
+            java.util.concurrent.BlockingQueue<Object> queue =
+                    new java.util.concurrent.LinkedBlockingQueue<>();
+            // ★ 必须 subscribeOn(boundedElastic)：
+            //   下游是 Flux.fromStream(reader.lines()) 这种**同步源**，
+            //   LambdaSubscriber 订阅时会以无界请求在当前线程把整条流抽干，
+            //   subscribe() 要等全部读完才返回 → 队列里已是攒好的一坨。
+            //   换到别的线程订阅，subscribe() 立即返回，本线程才能边到边写。
+            reactor.core.Disposable subscription = ragChatService.chat(dto)
+                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .subscribe(
+                            queue::offer,
+                            err -> queue.offer(err),
+                            () -> queue.offer(END));
+
             try {
-                // toIterable() 阻塞式消费：在 Spring 分配的异步线程上逐事件写入
-                for (RagStreamItem item : ragChatService.chat(dto).toIterable()) {
-                    outputStream.write(frame(item));
+                for (;;) {
+                    Object o = queue.take();
+                    if (o == END) {
+                        break;
+                    }
+                    if (o instanceof Throwable err) {
+                        log.warn("[RAG][SSE] 流中断: {}", rootMessage(err));
+                        outputStream.write(frame(new RagStreamItem(
+                                RagStreamItem.Kind.ERROR, null, null, null,
+                                null, null, null, rootMessage(err))));
+                        outputStream.flush();
+                        break;
+                    }
+                    outputStream.write(frame((RagStreamItem) o));
                     outputStream.flush();
                 }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                log.warn("[RAG][SSE] 写入被中断");
             } catch (Exception e) {
-                // 客户端断开（IOException）或业务异常：尽最大努力补一条 error 事件
-                log.warn("[RAG][SSE] 流中断: {}", rootMessage(e));
-                try {
-                    outputStream.write(frame(new RagStreamItem(
-                            RagStreamItem.Kind.ERROR, null, null, null,
-                            null, null, null, rootMessage(e))));
-                    outputStream.flush();
-                } catch (Exception ignored) {
-                    // 连接已断，忽略
-                }
+                // 多为客户端断开（Broken pipe / AsyncRequestNotUsable）
+                log.debug("[RAG][SSE] 客户端断开或写入失败: {}", rootMessage(e));
+            } finally {
+                subscription.dispose();
             }
         };
 

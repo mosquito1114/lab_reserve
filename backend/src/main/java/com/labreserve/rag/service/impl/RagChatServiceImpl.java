@@ -351,7 +351,10 @@ public class RagChatServiceImpl implements RagChatService {
     private RagSession resolveSession(Long sessionId, Long userId, String firstMessage) {
         if (sessionId != null) {
             RagSession s = sessionMapper.selectById(sessionId);
-            BizException.requireFound(s, "会话不存在");
+            // 已软删除的会话不再允许续聊（当作不存在，避免"删了还能用"）
+            if (s == null || Integer.valueOf(0).equals(s.getStatus())) {
+                throw BizException.notFound("会话不存在或已删除");
+            }
             // 越权检查：只能用自己的会话
             if (!userId.equals(s.getUserId())) {
                 throw BizException.forbidden("无权访问该会话");
@@ -364,6 +367,7 @@ public class RagChatServiceImpl implements RagChatService {
         s.setTitle("新会话");
         s.setMessageCount(0);
         s.setLastTokenWindow(0);
+        s.setStatus(1);
         s.setLastMessageAt(LocalDateTime.now());
         sessionMapper.insert(s);
         // 首条消息回填标题
