@@ -94,6 +94,7 @@ public final class PermissionConst {
     // ------------------------------------------------------------
     public static final String MESSAGE_LIST = "message:list";
     public static final String MESSAGE_DELIVERY_LOG = "message:delivery-log";
+    public static final String MESSAGE_SEND = "message:send";
     public static final String STAT_VIEW = "stat:view";
     public static final String STAT_EXPORT = "stat:export";
 
@@ -105,6 +106,9 @@ public final class PermissionConst {
     public static final String SYSTEM_PERMISSION_LIST = "system:permission:list";
     public static final String SYSTEM_LOG_LIST = "system:log:list";
     public static final String SYSTEM_LOG_EXPORT = "system:log:export";
+
+    /** 查看系统运行状态（`/api/system/monitor`，DB / Redis / 运行时长；仅系统管理员） */
+    public static final String SYSTEM_MONITOR = "system:monitor:view";
 
     // ------------------------------------------------------------
     // RAG（智能问答）—— R0 骨架阶段上线

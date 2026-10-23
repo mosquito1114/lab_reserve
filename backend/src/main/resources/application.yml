@@ -84,6 +84,9 @@ spring:
 
   # ------------------------------------------------------------
   # SMTP 邮件（迭代 3 使用）
+  #
+  # QQ 邮箱：MAIL_PORT=465 + ssl=true + 授权码（不是登录密码）
+  # 本地调试（scripts/tools/dev_smtp.py）：MAIL_PORT=1025 + MAIL_SMTP_SSL=false + MAIL_SMTP_AUTH=false
   # ------------------------------------------------------------
   mail:
     host: ${MAIL_HOST:smtp.qq.com}
@@ -94,9 +97,9 @@ spring:
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${MAIL_SMTP_AUTH:true}
           ssl:
-            enable: true
+            enable: ${MAIL_SMTP_SSL:true}
           connectiontimeout: 10000
           timeout: 10000
           writetimeout: 10000
@@ -137,7 +140,7 @@ aliyun:
 # 业务参数（对应 agents/req.md 的问答结论）
 # ============================================================
 lab-reserve:
-  version: 0.2.0
+  version: 0.3.0
   jwt:
     secret: ${JWT_SECRET:lab-reserve-default-secret-please-change-me-in-env-file}
     access-expire-seconds: ${JWT_ACCESS_EXPIRE:7200}
@@ -154,9 +157,16 @@ lab-reserve:
     from-name: ${MAIL_FROM_NAME:实验室预约管理系统}
     # 邮件投递最大重试次数，超过进死信队列
     max-retry: 3
+    # 提示：max-retry 是「总投递次数上限（含首次）」，默认 3 = 首发 1 次 + 重试 2 次后进死信
+    # 消费轮询 / 重投巡检间隔与最小闲置时间，联调时可临时调小（见 acceptance 脚本）
+    poll-interval-ms: ${MAIL_POLL_INTERVAL_MS:2000}
+    reclaim-interval-ms: ${MAIL_RECLAIM_INTERVAL_MS:30000}
+    retry-min-idle-seconds: ${MAIL_RETRY_MIN_IDLE_SECONDS:60}
+    enqueue-grace-seconds: ${MAIL_ENQUEUE_GRACE_SECONDS:60}
   sensitive:
     # 允许查看完整手机号的角色（脱敏例外，必须写操作日志）
-    reveal-roles: SYS_ADMIN,LAB_ADMIN
+    # 需求变更 2：LAB_ADMIN 不再具备 user:view-phone，脱敏例外只剩系统管理员
+    reveal-roles: SYS_ADMIN
   rag:
     # 【默认关闭】只有显式设置 RAG_ENABLED=true 且下游凭据齐全时才启用
     enabled: ${RAG_ENABLED:false}
@@ -201,6 +211,19 @@ lab-reserve:
 # Spring AI（客户端配置：仅在 lab-reserve.rag.enabled=true 时被 SpringAIConfig 读取）
 # ============================================================
 spring.ai:
+  # 默认关闭所有模型类型：Spring AI 1.0 的自动装配在缺少 api-key 时会直接让应用启动失败
+  # （报错形如「OpenAI API key must be set ... OpenAiChatModel / OpenAiAudioSpeechModel」）。
+  # RAG 默认 enabled=false，所以这里默认 none；启用 RAG 时把下面两个环境变量切成 openai：
+  #   SPRING_AI_MODEL_CHAT=openai
+  #   SPRING_AI_MODEL_EMBEDDING=openai
+  model:
+    chat: ${SPRING_AI_MODEL_CHAT:none}
+    embedding: ${SPRING_AI_MODEL_EMBEDDING:none}
+    audio:
+      speech: none
+      transcription: none
+    image: none
+    moderation: none
   openai:
     base-url: ${LLM_BASE_URL:https://api.deepseek.com/v1}
     api-key:  ${LLM_API_KEY:}

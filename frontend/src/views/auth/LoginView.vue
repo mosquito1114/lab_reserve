@@ -41,8 +41,8 @@
       </el-form>
 
       <div class="login-tip">
-        <p>演示账号：<b>admin</b> / <b>admin123</b>（系统管理员）</p>
-        <p>其余演示账号密码均为 <b>123456</b></p>
+        <p>演示账号：<b>admin</b>、<b>labadmin</b>、<b>repair01</b>、<b>stu2021001</b>、<b>tea1001</b> 等</p>
+        <p>全部演示账号密码均为 <b>123456</b>（含系统管理员）</p>
       </div>
     </div>
   </div>

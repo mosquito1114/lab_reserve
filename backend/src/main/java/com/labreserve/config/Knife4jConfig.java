@@ -79,6 +79,16 @@ public class Knife4jConfig {
                 .build();
     }
 
+    /** 用户管理模块：用户 CRUD + 班级 */
+    @Bean
+    public GroupedOpenApi userApi() {
+        return GroupedOpenApi.builder()
+                .group("04-用户管理")
+                .displayName("04-用户管理")
+                .pathsToMatch("/api/user/**", "/api/class/**")
+                .build();
+    }
+
     /** 兜底分组：所有接口 */
     @Bean
     public GroupedOpenApi allApi() {

@@ -50,6 +50,9 @@ export const useUserStore = defineStore('user', () => {
     setToken(result.accessToken, result.refreshToken)
     userInfo.value = result.user
     permissions.value = result.permissions ?? []
+    // 菜单只在 /auth/get_info 里下发（登录响应没有），这里补一次，
+    // 否则侧边栏会空着，看起来「所有角色都只有首页」。
+    await fetchInfo()
   }
 
   /** 拉取当前用户信息（刷新页面后调用） */

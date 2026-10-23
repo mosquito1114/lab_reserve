@@ -33,6 +33,24 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '首页', icon: 'HomeFilled' }
       },
       {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('@/views/profile/ProfileView.vue'),
+        meta: { title: '个人中心', icon: 'User' }
+      },
+      {
+        path: 'system/user',
+        name: 'SystemUser',
+        component: () => import('@/views/system/UserView.vue'),
+        meta: { title: '用户管理', icon: 'UserFilled', permission: 'user:list' }
+      },
+      {
+        path: 'system/class',
+        name: 'SystemClass',
+        component: () => import('@/views/system/ClassView.vue'),
+        meta: { title: '班级管理', icon: 'School', permission: 'class:manage' }
+      },
+      {
         path: 'system/role',
         name: 'SystemRole',
         component: () => import('@/views/system/RoleView.vue'),
@@ -43,13 +61,53 @@ export const routes: RouteRecordRaw[] = [
         name: 'SystemOperationLog',
         component: () => import('@/views/system/OperationLogView.vue'),
         meta: { title: '操作日志', icon: 'Document', permission: 'system:log:list' }
+      },
+      {
+        path: 'resource/laboratory',
+        name: 'ResourceLaboratory',
+        component: () => import('@/views/resource/LaboratoryView.vue'),
+        meta: { title: '实验室管理', icon: 'House', permission: 'resource:lab:list' }
+      },
+      {
+        path: 'resource/equipment',
+        name: 'ResourceEquipment',
+        component: () => import('@/views/resource/EquipmentView.vue'),
+        meta: { title: '设备管理', icon: 'Cpu', permission: 'resource:equip:list' }
+      },
+      {
+        path: 'resource/dict',
+        name: 'ResourceDict',
+        component: () => import('@/views/resource/DictView.vue'),
+        meta: { title: '字典维护', icon: 'Collection', permission: 'dict:manage' }
+      },
+      {
+        path: 'resource/log',
+        name: 'ResourceLog',
+        component: () => import('@/views/resource/ResourceLogView.vue'),
+        meta: { title: '资源更新日志', icon: 'Tickets', permission: 'resource:log:list' }
+      },
+      {
+        path: 'resource/availability',
+        name: 'ResourceAvailability',
+        component: () => import('@/views/resource/AvailabilityView.vue'),
+        meta: { title: '资源可用性', icon: 'Calendar', permission: 'resource:lab:list' }
+      },
+      {
+        path: 'message/inbox',
+        name: 'MessageInbox',
+        component: () => import('@/views/message/InboxView.vue'),
+        meta: { title: '消息中心', icon: 'ChatDotRound', permission: 'message:list' }
+      },
+      {
+        path: 'message/delivery-log',
+        name: 'MessageDeliveryLog',
+        component: () => import('@/views/message/DeliveryLogView.vue'),
+        meta: { title: '邮件投递记录', icon: 'Promotion', permission: 'message:delivery-log' }
       }
       // ↓↓↓ 后续迭代在此按模块追加子路由 ↓↓↓
       // 预约管理：/reservation/apply  /reservation/my  /reservation/audit  /reservation/change-audit
-      // 资源管理：/resource/laboratory  /resource/equipment  /resource/update-log
       // 排队候补：/queue/my  /queue/ban
       // 设备运维：/repair/apply  /repair/my  /repair/order  /repair/task
-      // 消息通知：/message
       // 数据统计：/statistics
       // 系统管理：/system/user  /system/role  /system/operation-log
     ]
@@ -94,7 +152,8 @@ router.beforeEach(async (to) => {
 
   // 已登录但用户信息还没加载（刷新页面）→ 先拉一次，拿到权限码才能判断路由权限
   const userStore = useUserStore()
-  if (!userStore.userInfo) {
+  // 菜单也是 get_info 下发的：menus 为空时同样要补拉（否则侧边栏空着）
+  if (!userStore.userInfo || userStore.menus.length === 0) {
     try {
       await userStore.fetchInfo()
     } catch {

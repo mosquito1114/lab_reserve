@@ -31,16 +31,30 @@ public class MenuService {
     private record GroupDef(String path, String title, String icon, List<MenuDef> children) {
     }
 
-    /** 总是可见的菜单（不依赖权限）：首页 */
+    /** 总是可见的菜单（不依赖权限）：首页 + 个人中心（所有角色都能改自己的联系方式） */
     private static final List<MenuDef> ALWAYS = List.of(
-            new MenuDef("/dashboard", "首页", "HomeFilled", null)
+            new MenuDef("/dashboard", "首页", "HomeFilled", null),
+            new MenuDef("/profile", "个人中心", "User", null)
     );
 
-    /** 需要权限的分组菜单 */
+    /** 需要权限的分组菜单（迭代 2 系统管理 → 迭代 4 资源管理 → 迭代 3 消息通知） */
     private static final List<GroupDef> GROUPS = List.of(
             new GroupDef("/system", "系统管理", "Setting", List.of(
+                    new MenuDef("/system/user", "用户管理", "UserFilled", PermissionConst.USER_LIST),
+                    new MenuDef("/system/class", "班级管理", "School", PermissionConst.CLASS_MANAGE),
                     new MenuDef("/system/role", "角色权限", "Lock", PermissionConst.SYSTEM_ROLE_LIST),
                     new MenuDef("/system/operation-log", "操作日志", "Document", PermissionConst.SYSTEM_LOG_LIST)
+            )),
+            new GroupDef("/resource", "资源管理", "OfficeBuilding", List.of(
+                    new MenuDef("/resource/laboratory", "实验室管理", "House", PermissionConst.RESOURCE_LAB_LIST),
+                    new MenuDef("/resource/equipment", "设备管理", "Cpu", PermissionConst.RESOURCE_EQUIP_LIST),
+                    new MenuDef("/resource/dict", "字典维护", "Collection", PermissionConst.DICT_MANAGE),
+                    new MenuDef("/resource/log", "资源更新日志", "Tickets", PermissionConst.RESOURCE_LOG_LIST),
+                    new MenuDef("/resource/availability", "资源可用性", "Calendar", PermissionConst.RESOURCE_LAB_LIST)
+            )),
+            new GroupDef("/message", "消息通知", "Bell", List.of(
+                    new MenuDef("/message/inbox", "消息中心", "ChatDotRound", PermissionConst.MESSAGE_LIST),
+                    new MenuDef("/message/delivery-log", "邮件投递记录", "Promotion", PermissionConst.MESSAGE_DELIVERY_LOG)
             ))
     );
 

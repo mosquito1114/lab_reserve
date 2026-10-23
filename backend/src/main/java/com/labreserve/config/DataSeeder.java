@@ -90,7 +90,7 @@ public class DataSeeder implements ApplicationRunner {
                     count("tb_role"), count("tb_permission"), count("tb_user"),
                     count("tb_laboratory"), count("tb_equipment"),
                     count("tb_reservation"), count("tb_message"));
-            log.info("[种子数据] 演示账号：admin / admin123（系统管理员），其余账号密码均为 123456");
+            log.info("[种子数据] 演示账号：全部账号密码均为 123456（含 admin）");
         } catch (Exception e) {
             log.warn("[种子数据] 统计行数失败", e);
         }

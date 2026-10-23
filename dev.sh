@@ -105,7 +105,7 @@ start_db() {
         redis="$(docker inspect -f '{{.State.Health.Status}}' "$REDIS_CONTAINER" 2>/dev/null || echo missing)"
         qdrant="$(docker inspect -f '{{.State.Health.Status}}' "$QDRANT_CONTAINER" 2>/dev/null || echo missing)"
         if [[ "$mysql" == "healthy" && "$redis" == "healthy" ]]; then
-            ok "MySQL / Redis 均已 healthy（qdrant=$qdrant，RAG_ENABLED=false 时不需要它 healthy）"
+            ok "MySQL / Redis 均已 healthy（qdrant=${qdrant}，RAG_ENABLED=false 时不需要它 healthy）"
             return 0
         fi
         sleep 2

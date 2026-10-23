@@ -6,9 +6,10 @@
 --
 -- ⚠️ 账号密码说明
 --   演示账号的密码是 BCrypt 哈希，明文如下（仅用于课设演示）：
---     admin                    → admin123
---     其余全部演示账号           → 123456
+--     全部演示账号（含 admin） → 123456
 --   生产环境必须删除本文件或修改全部密码。
+--
+--   邮件通知默认关闭（notify_email = 0），用户可在「个人中心」自行开启。
 --
 -- ⚠️ 数据自洽性
 --   tb_reservation 上的 idx uk_reservation_lab_occupy 要求
@@ -37,7 +38,7 @@ INSERT INTO tb_role (id, code, name, description) VALUES
 -- 2. 权限点
 -- ============================================================================
 
-INSERT INTO tb_permission (code, name, module, description) VALUES
+INSERT IGNORE INTO tb_permission (code, name, module, description) VALUES
 -- 用户管理
 ('user:list',           '查询用户列表',   'user',        NULL),
 ('user:view',           '查看用户详情',   'user',        NULL),
@@ -91,6 +92,7 @@ INSERT INTO tb_permission (code, name, module, description) VALUES
 -- 消息
 ('message:list',        '查看消息',       'message',     NULL),
 ('message:delivery-log','查看邮件投递记录','message',    NULL),
+('message:send',       '发送系统通知',   'message',     '管理员向指定用户发送系统通知（站内信 + 邮件）'),
 -- 统计
 ('stat:view',           '查看统计',       'statistics',  NULL),
 ('stat:export',         '导出报表',       'statistics',  NULL),
@@ -98,6 +100,7 @@ INSERT INTO tb_permission (code, name, module, description) VALUES
 ('system:role:list',    '查询角色权限',   'system',      NULL),
 ('system:role:update',  '修改角色权限',   'system',      NULL),
 ('system:permission:list','查询权限点',   'system',      NULL),
+('system:monitor:view', '查看系统运行状态', 'system', '仅系统管理员；含 DB / Redis / 运行时长'),
 ('system:log:list',     '查询操作日志',   'system',      NULL),
 ('system:log:export',   '导出操作日志',   'system',      NULL),
 -- RAG 智能问答（与 V2/V3 迁移一致；放这里是因为角色表由本脚本灌入,
@@ -114,7 +117,7 @@ INSERT INTO tb_permission (code, name, module, description) VALUES
 -- ============================================================================
 
 -- 学生：设备预约 + 我的实验课表 + 排队 + 报修 + 消息
-INSERT INTO tb_role_permission (role_id, permission_id)
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
@@ -130,7 +133,7 @@ JOIN tb_permission p ON p.code IN (
 WHERE r.code = 'STUDENT';
 
 -- 教师：实验室排课（必须指定上课班级）+ 设备预约 + 排队 + 报修 + 消息
-INSERT INTO tb_role_permission (role_id, permission_id)
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
@@ -146,44 +149,42 @@ JOIN tb_permission p ON p.code IN (
 WHERE r.code = 'TEACHER';
 
 -- 系统管理员：用户管理 + 全部日志与统计
-INSERT INTO tb_role_permission (role_id, permission_id)
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
     'user:list', 'user:view', 'user:create', 'user:update', 'user:disable', 'user:view-phone',
     'resource:lab:list', 'resource:equip:list', 'resource:log:list',
     'dict:list', 'class:list', 'class:manage',
-    'message:list', 'message:delivery-log',
+    'message:list', 'message:delivery-log', 'message:send',
     'stat:view', 'stat:export',
-    'system:role:list', 'system:role:update', 'system:permission:list',
+    'system:role:list', 'system:role:update', 'system:permission:list', 'system:monitor:view',
     'system:log:list', 'system:log:export'
 )
 WHERE r.code = 'SYS_ADMIN';
 
--- 实验室管理员：资源维护 + 预约审批 + 派单验收（注意：没有 user:create，落实需求 Q32）
-INSERT INTO tb_role_permission (role_id, permission_id)
+-- 实验室管理员：只管「实验室资源 + 审批调度 + 报修验收」
+-- 不给他用户管理、班级维护、操作日志（需求变更 2：管理员类权限收窄到本职）
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
-    'user:list', 'user:view', 'user:view-phone',
     'resource:lab:list', 'resource:lab:create', 'resource:lab:update', 'resource:lab:disable',
     'resource:equip:list', 'resource:equip:create', 'resource:equip:update', 'resource:equip:disable',
     'resource:log:list',
     'dict:list', 'dict:manage',
-    'class:list', 'class:manage',
     'reservation:list', 'reservation:list-all', 'reservation:view',
     'reservation:audit', 'reservation:release',
     'change:list', 'change:audit',
     'queue:list-all',
     'repair:create', 'repair:list', 'repair:review', 'repair:assign', 'repair:accept',
-    'message:list', 'message:delivery-log',
-    'stat:view', 'stat:export',
-    'system:log:list'
+    'message:list',
+    'stat:view', 'stat:export'
 )
 WHERE r.code = 'LAB_ADMIN';
 
 -- 维修人员：只看分配给自己的工单
-INSERT INTO tb_role_permission (role_id, permission_id)
+INSERT IGNORE INTO tb_role_permission (role_id, permission_id)
 SELECT r.id, p.id
 FROM tb_role r
 JOIN tb_permission p ON p.code IN (
@@ -264,9 +265,9 @@ INSERT INTO tb_class (id, class_name, college, major, grade, student_count, stat
 -- ============================================================================
 
 INSERT INTO tb_user (id, username, password, real_name, role_id, phone, email, notify_email, status) VALUES
-(1,  'admin',     '$2y$10$xDHNnjoa9FDKDjY4VAwt9uVJzGg1twiwTJcZ4jGX1cjDKOmoHiBFu', '系统管理员', 3, '13800000001', 'admin@lab-reserve.local',    0, 1),
-(2,  'labadmin',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '李文博',     4, '13800000002', 'labadmin@lab-reserve.local', 1, 1),
-(3,  'repair01',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '王建国',     5, '13800000003', 'repair01@lab-reserve.local', 1, 1),
+(1,  'admin',     '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '系统管理员', 3, '13800000001', 'admin@lab-reserve.local',    0, 1),
+(2,  'labadmin',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '李文博',     4, '13800000002', 'labadmin@lab-reserve.local', 0, 1),
+(3,  'repair01',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '王建国',     5, '13800000003', 'repair01@lab-reserve.local', 0, 1),
 (4,  'repair02',  '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '赵师傅',     5, '13800000004', 'repair02@lab-reserve.local', 0, 1),
 (5,  'stu2021001','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '张一鸣',     1, '13900001001', 'stu2021001@lab-reserve.local', 0, 1),
 (6,  'stu2021002','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '陈思远',     1, '13900001002', 'stu2021002@lab-reserve.local', 0, 1),
@@ -276,8 +277,8 @@ INSERT INTO tb_user (id, username, password, real_name, role_id, phone, email, n
 (10, 'stu2021006','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '吴俊杰',     1, '13900001006', 'stu2021006@lab-reserve.local', 0, 1),
 (11, 'stu2021007','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '郑雅文',     1, '13900001007', 'stu2021007@lab-reserve.local', 0, 1),
 (12, 'stu2021008','$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '孙博文',     1, '13900001008', 'stu2021008@lab-reserve.local', 0, 1),
-(13, 'tea1001',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '王lab教授', 2, '13700002001', 'tea1001@lab-reserve.local',   1, 1),
-(14, 'tea1002',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '李静宜',     2, '13700002002', 'tea1002@lab-reserve.local',   1, 1),
+(13, 'tea1001',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '王lab教授', 2, '13700002001', 'tea1001@lab-reserve.local',   0, 1),
+(14, 'tea1002',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '李静宜',     2, '13700002002', 'tea1002@lab-reserve.local',   0, 1),
 (15, 'tea1003',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '陈宏达',     2, '13700002003', 'tea1003@lab-reserve.local',   0, 1),
 (16, 'tea1004',   '$2y$10$8smwhhyvMIEOD9A/YpzXu.2a1w/Ar8Nat.DlVeDWJPhr7n1nfkIU2', '周美玲',     2, '13700002004', 'tea1004@lab-reserve.local',   0, 1);
 
