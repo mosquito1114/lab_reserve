@@ -51,6 +51,19 @@ public interface RagDocumentService {
      */
     void runSingleStep(Long documentId, StepCode code, String remark);
 
+    /**
+     * 跳过某 Step。
+     *
+     * <p><b>只允许 FINALIZE</b>（纯统计汇总，跳过不影响检索数据完整性，
+     * 直接落 READY）。EXTRACT / SANITIZE / CHUNK / EMBED / UPSERT 任一被跳过都会
+     * 导致后续数据不完整（例如跳过 CHUNK 就没有切片可嵌入），因此一律拒绝，
+     * 请改用 {@link #runSingleStep} 重试。
+     *
+     * @param documentId 文档 ID
+     * @param stepCode   步骤编码（字符串，会校验合法性）
+     */
+    void skipStep(Long documentId, String stepCode);
+
     /** 设置业务状态（0 停用 / 1 启用） */
     void setBusinessStatus(Long documentId, int status);
 

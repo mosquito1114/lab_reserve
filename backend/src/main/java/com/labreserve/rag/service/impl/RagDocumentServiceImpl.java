@@ -248,6 +248,45 @@ public class RagDocumentServiceImpl implements RagDocumentService {
     }
 
     // --------------------------------------------------------------
+    // 跳过步骤
+    // --------------------------------------------------------------
+
+    @Override
+    public void skipStep(Long documentId, String stepCode) {
+        StepCode code;
+        try {
+            code = StepCode.valueOf(stepCode);
+        } catch (IllegalArgumentException e) {
+            throw BizException.badRequest("未知 StepCode: " + stepCode);
+        }
+
+        // 只有 FINALIZE 可以安全跳过：它只做统计汇总，跳过不影响已写入的 chunk / 向量
+        if (code != StepCode.FINALIZE) {
+            throw BizException.badRequest(
+                    "只能跳过 FINALIZE。当前链路中 " + code + " 是必需步骤——"
+                            + "跳过它会导致后续数据不完整（如跳过 CHUNK 就没有切片可嵌入）。"
+                            + "如果是失败后想继续，请改用 /run_step 重试。");
+        }
+
+        RagDocument doc = getDocument(documentId);
+        if (!RagPipelineState.UPSERTED.name().equals(doc.getPipelineState())) {
+            throw BizException.badRequest(
+                    "只有 UPSERTED 状态才能跳过 FINALIZE，当前状态: " + doc.getPipelineState());
+        }
+
+        // 直接把文档落 READY（等价于 FINALIZE 的最终效果，只是不重算 chunkCount）
+        doc.setPipelineState(RagPipelineState.READY.name());
+        doc.setReadyAt(java.time.LocalDateTime.now());
+        doc.setLastErrorStep(null);
+        doc.setLastErrorMsg(null);
+        doc.setLastErrorAt(null);
+        docMapper.updateById(doc);
+
+        log.info("[RAG] 文档 {} 跳过 FINALIZE，直接落 READY（chunkCount 沿用 {}）",
+                doc.getId(), doc.getChunkCount());
+    }
+
+    // --------------------------------------------------------------
     // 启停
     // --------------------------------------------------------------
 

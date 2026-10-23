@@ -201,18 +201,17 @@ public class RagAdminController {
     }
 
     /**
-     * 跳过某 Step（标记 SKIPPED）。
-     * R1 仅作占位——直接返回 VOID + 后续完整跳步实现放 R5 RecoveryRunner 配套。
+     * 跳过某 Step（R5 实现：只允许 FINALIZE）。
      */
-    @Operation(summary = "跳过某 Step（仅做占位记录，R1 不真停）")
+    @Operation(summary = "跳过某 Step（仅 FINALIZE 允许）",
+            description = "只有 FINALIZE（纯统计汇总）可跳过，直接落 READY；"
+                    + "EXTRACT/SANITIZE/CHUNK/EMBED/UPSERT 跳过后数据不完整，一律拒绝")
     @RequirePerm(PermissionConst.RAG_DOC_REINDEX)
     @OpLog(module = OperationModule.RAG, type = OperationType.UPDATE,
             content = "跳过 Step")
     @PostMapping("/skip_step")
     public Result<Void> skipStep(@RequestBody @Valid StepRunPathDTO dto) {
-        // R1 实现简单地记录一条 INFO，让管理员知道这个端点已可达
-        log.info("[RAG] admin skip_step 占位被调用 docId={} step={} remark={}",
-                dto.getDocumentId(), dto.getStepCode(), dto.getRemark());
+        ragDocumentService.skipStep(dto.getDocumentId(), dto.getStepCode());
         return Result.ok();
     }
 
