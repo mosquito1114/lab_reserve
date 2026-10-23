@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import urllib.request
 import urllib.error
 
@@ -81,6 +82,26 @@ def stream_chat(base, token, question, timeout=90):
     return answer, citations, None
 
 
+def stream_chat_with_retry(base, token, question, delay, max_retry=2):
+    """带节流与 429 重试的流式问答。
+
+    后端限流是 30 req/min/user（lab-reserve.rag.chat.rate-limit-per-user-per-min），
+    评估集 30 条连续打会撞 429。这里：
+      - 每条之间 --delay 秒（默认 2.5s，30 条约 75s，任何 60s 窗口内 < 30 次）
+      - 命中 429 时等待 20s 重试（最多 max_retry 次）
+    """
+    for attempt in range(max_retry + 1):
+        if delay > 0:
+            time.sleep(delay)
+        answer, citations, error = stream_chat(base, token, question)
+        if error and "频繁" in str(error) and attempt < max_retry:
+            print(f"          ↳ 触发限流，等待 20s 重试（第 {attempt + 1} 次）")
+            time.sleep(20)
+            continue
+        return answer, citations, error
+    return answer, citations, error
+
+
 def judge(case, answer, citations, error):
     """返回 (是否通过, 说明)"""
     expect = case["expect"]
@@ -136,6 +157,8 @@ def main():
     ap.add_argument("--cases", default=None, help="questions.json 路径")
     ap.add_argument("--min-rate", type=float, default=0.85, help="通过率门禁（默认 0.85）")
     ap.add_argument("--verbose", action="store_true")
+    ap.add_argument("--delay", type=float, default=2.5,
+                    help="每条用例间隔秒数（默认 2.5，避免撞 30/min 限流）")
     args = ap.parse_args()
 
     here = os.path.dirname(os.path.abspath(__file__))
@@ -154,7 +177,8 @@ def main():
     passed, failed = [], []
     for c in cases:
         try:
-            answer, citations, error = stream_chat(args.base, token, c["question"])
+            answer, citations, error = stream_chat_with_retry(
+                args.base, token, c["question"], args.delay)
             ok, note = judge(c, answer, citations, error)
         except Exception as e:  # noqa: BLE001
             ok, note, answer = False, f"请求异常: {e}", ""
