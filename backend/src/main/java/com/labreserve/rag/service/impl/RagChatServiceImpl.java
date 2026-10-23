@@ -102,6 +102,9 @@ public class RagChatServiceImpl implements RagChatService {
     private SecurityUtils securityUtils;
     @Autowired
     private SensitiveUtils sensitiveUtils;
+
+    @Autowired
+    private com.labreserve.rag.util.StreamingSanitizer streamingSanitizer;
     @Autowired
     private RagProperties props;
 
@@ -240,8 +243,14 @@ public class RagChatServiceImpl implements RagChatService {
         StringBuilder buffer = new StringBuilder();
         AtomicBoolean persisted = new AtomicBoolean(false);
 
+        // ★ 第③道墙：流式后置脱敏
+        //   必须在"吐给客户端"这一侧生效，而不是只对落库那份脱敏——
+        //   否则用户实时看到的仍是未脱敏文本（R5 核查发现的原实现缺陷）。
+        //   StreamingSanitizer 用尾部保留策略处理"手机号被 chunk 切断"的情况。
+        Flux<String> safeFlux = streamingSanitizer.sanitize(textFlux);
+
         // 正文 chunk 透传 + 累积
-        Flux<RagStreamItem> body = textFlux.map(chunk -> {
+        Flux<RagStreamItem> body = safeFlux.map(chunk -> {
             buffer.append(chunk);
             return new RagStreamItem(RagStreamItem.Kind.CHUNK, chunk, null, null, null, null, null, null);
         });
