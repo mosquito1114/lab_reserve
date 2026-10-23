@@ -171,6 +171,28 @@ public class RagDocumentServiceImpl implements RagDocumentService {
     }
 
     // --------------------------------------------------------------
+    // 分页列表
+    // --------------------------------------------------------------
+
+    @Override
+    public com.labreserve.common.result.PageResult<RagDocument> page(
+            com.labreserve.rag.model.dto.RagDocumentPageDTO dto) {
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<RagDocument> w =
+                com.baomidou.mybatisplus.core.toolkit.Wrappers.<RagDocument>lambdaQuery()
+                        .like(dto.getKeyword() != null && !dto.getKeyword().isBlank(),
+                                RagDocument::getTitle, dto.getKeyword())
+                        .eq(dto.getCategory() != null && !dto.getCategory().isBlank(),
+                                RagDocument::getCategory, dto.getCategory())
+                        .eq(dto.getPipelineState() != null && !dto.getPipelineState().isBlank(),
+                                RagDocument::getPipelineState, dto.getPipelineState())
+                        .eq(dto.getStatus() != null, RagDocument::getStatus, dto.getStatus())
+                        .orderByDesc(RagDocument::getId);
+
+        var page = docMapper.selectPage(dto.toMpPage(), w);
+        return com.labreserve.common.result.PageResult.of(page);
+    }
+
+    // --------------------------------------------------------------
     // 重建
     // --------------------------------------------------------------
 

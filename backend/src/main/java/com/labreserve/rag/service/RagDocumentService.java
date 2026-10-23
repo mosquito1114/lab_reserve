@@ -36,6 +36,14 @@ public interface RagDocumentService {
     RagDocument getDocument(Long id);
 
     /**
+     * 文档分页列表（知识库管理页）。
+     *
+     * @param dto 筛选条件（标题关键词 / 类别 / 流水线状态 / 启停）
+     */
+    com.labreserve.common.result.PageResult<RagDocument> page(
+            com.labreserve.rag.model.dto.RagDocumentPageDTO dto);
+
+    /**
      * 重建索引（{@code POST /reingest}）：把 ingest_version +1，全链重跑。
      *
      * <p>可选传 {@code fileUrl} / 切片参数，三层回退会照旧生效。

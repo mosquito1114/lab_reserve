@@ -8,13 +8,13 @@ import com.labreserve.common.exception.BizException;
 import com.labreserve.common.result.PageResult;
 import com.labreserve.common.result.Result;
 import com.labreserve.model.dto.IdDTO;
-import com.labreserve.rag.adapter.RagSseEmitterAdapter;
 import com.labreserve.rag.mapper.RagMessageMapper;
 import com.labreserve.rag.mapper.RagSessionMapper;
 import com.labreserve.rag.model.dto.ChatSendDTO;
 import com.labreserve.rag.model.dto.FeedbackDTO;
 import com.labreserve.rag.model.entity.RagMessage;
 import com.labreserve.rag.model.entity.RagSession;
+import com.labreserve.rag.model.vo.RagStreamItem;
 import com.labreserve.rag.model.vo.SessionVO;
 import com.labreserve.rag.service.RagChatService;
 import com.labreserve.rag.service.RagChatHistoryService;
@@ -25,12 +25,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 
 import java.util.List;
 
@@ -68,7 +70,7 @@ public class RagChatController {
     private RagChatHistoryService historyService;
 
     @Autowired
-    private RagSseEmitterAdapter sseAdapter;
+    private ObjectMapper objectMapper;
 
     // ============================================================
     // 提问（SSE 流式）
@@ -79,13 +81,67 @@ public class RagChatController {
                     + "仅基于知识库作答，未命中会硬拒不调 LLM。")
     @RequirePerm(PermissionConst.RAG_CHAT_QUERY)
     @PostMapping(value = "/send", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter send(@RequestBody @Valid ChatSendDTO dto) {
+    public ResponseEntity<StreamingResponseBody> send(@RequestBody @Valid ChatSendDTO dto) {
         // 限频与全局并发的检查放在 service 内的 Flux.defer 里，
         // 这里只做一次轻量前置校验（未登录直接 401，不进 SSE）
         if (securityUtilsNotLogged()) {
             throw new BizException(com.labreserve.common.result.ResultCode.UNAUTHORIZED, "未登录或登录已失效，请重新登录");
         }
-        return sseAdapter.bridge(ragChatService.chat(dto));
+
+        StreamingResponseBody body = outputStream -> {
+            try {
+                // toIterable() 阻塞式消费：在 Spring 分配的异步线程上逐事件写入
+                for (RagStreamItem item : ragChatService.chat(dto).toIterable()) {
+                    outputStream.write(frame(item));
+                    outputStream.flush();
+                }
+            } catch (Exception e) {
+                // 客户端断开（IOException）或业务异常：尽最大努力补一条 error 事件
+                log.warn("[RAG][SSE] 流中断: {}", rootMessage(e));
+                try {
+                    outputStream.write(frame(new RagStreamItem(
+                            RagStreamItem.Kind.ERROR, null, null, null,
+                            null, null, null, rootMessage(e))));
+                    outputStream.flush();
+                } catch (Exception ignored) {
+                    // 连接已断，忽略
+                }
+            }
+        };
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_EVENT_STREAM)
+                .header("Cache-Control", "no-cache")
+                // 关掉 nginx 的响应缓冲，否则流式会被攒成一坨
+                .header("X-Accel-Buffering", "no")
+                .body(body);
+    }
+
+    /**
+     * 把一个事件序列化成 SSE 帧：{@code event:{kind}
+data:{json}
+
+}。
+     */
+    private byte[] frame(RagStreamItem item) throws Exception {
+        String json;
+        try {
+            json = objectMapper.writeValueAsString(item);
+        } catch (Exception e) {
+            json = "{\"kind\":\"ERROR\",\"error\":\"序列化失败\"}";
+        }
+        String text = "event:" + item.getKind().name().toLowerCase()
+                + "\ndata:" + json + "\n\n";
+        return text.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+
+    private static String rootMessage(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null && cur.getCause() != cur) {
+            cur = cur.getCause();
+        }
+        String msg = cur.getMessage();
+        return msg == null ? cur.getClass().getSimpleName() : msg;
     }
 
     // ============================================================

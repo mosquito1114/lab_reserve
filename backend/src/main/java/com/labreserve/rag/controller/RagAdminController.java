@@ -14,6 +14,7 @@ import com.labreserve.rag.enums.StepCode;
 import com.labreserve.rag.mapper.RagChunkMapper;
 import com.labreserve.rag.mapper.RagPipelineStepMapper;
 import com.labreserve.rag.model.dto.DocumentUploadDTO;
+import com.labreserve.rag.model.dto.RagDocumentPageDTO;
 import com.labreserve.rag.model.dto.ReingestDTO;
 import com.labreserve.rag.model.dto.StepRunDTO;
 import com.labreserve.rag.model.dto.StepRunPathDTO;
@@ -105,6 +106,21 @@ public class RagAdminController {
             @ModelAttribute @Valid DocumentUploadDTO form) {
         Long docId = ragDocumentService.uploadAndDispatch(file, form);
         return Result.ok(docId);
+    }
+
+    // --------------------------------------------------------------
+    // 1.5 分页列表（知识库管理页）
+    // --------------------------------------------------------------
+
+    @Operation(summary = "文档分页列表", description = "支持标题关键词 / 类别 / 流水线状态 / 启停筛选")
+    @RequirePerm(PermissionConst.RAG_DOC_LIST)
+    @PostMapping("/list")
+    public Result<PageResult<RagDocumentVO>> list(@RequestBody RagDocumentPageDTO dto) {
+        PageResult<RagDocument> page = ragDocumentService.page(dto);
+        List<RagDocumentVO> records = page.getRecords().stream()
+                .map(this::toDocumentVO)
+                .toList();
+        return Result.ok(PageResult.of(records, page.getTotal(), page.getPageNum(), page.getPageSize()));
     }
 
     // --------------------------------------------------------------
