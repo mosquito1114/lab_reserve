@@ -198,9 +198,10 @@ public class RagChatServiceImpl implements RagChatService {
                                                String rewrittenQuestion,
                                                AtomicInteger usedTokens, AtomicBoolean degraded) {
         // ---- Step 4 检索 ----
-        List<CitationVO> citations;
+        KbRetriever.RetrievalResult retrieval;
         try {
-            citations = kbRetriever.retrieve(rewrittenQuestion, props.getChat().getHistoryWindow());
+            // 注意：topK 用 kbTopK（不是 historyWindow —— 两者语义完全不同）
+            retrieval = kbRetriever.retrieve(rewrittenQuestion, props.getChat().getKbTopK());
         } catch (Exception e) {
             log.warn("[RAG][CHAT] 检索异常,降级为拒答: {}", e.getMessage());
             degraded.set(true);
@@ -208,8 +209,11 @@ public class RagChatServiceImpl implements RagChatService {
                     "AI 服务暂时繁忙，请稍后再试。", intent);
         }
 
+        List<CitationVO> citations = retrieval.citations();
+        List<String> evidenceTexts = retrieval.evidenceTexts();
+
         // ---- 未命中硬拒（零幻觉，不调 LLM）----
-        if (citations == null || citations.isEmpty()) {
+        if (retrieval.isEmpty()) {
             log.info("[RAG][CHAT] 检索未命中,硬拒不调 LLM: sessionId={}", session.getId());
             return templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
                     "抱歉，我没在实验室知识库里找到相关说明。\n\n"
@@ -224,7 +228,7 @@ public class RagChatServiceImpl implements RagChatService {
         // ---- Step 5 流式合成 ----
         Flux<String> textFlux;
         try {
-            textFlux = synthesizer.stream(rewrittenQuestion, citations)
+            textFlux = synthesizer.stream(rewrittenQuestion, citations, evidenceTexts)
                     .timeout(java.time.Duration.ofSeconds(60));
         } catch (Exception e) {
             log.warn("[RAG][CHAT] 合成建立失败,降级: {}", e.getMessage());

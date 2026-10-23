@@ -193,6 +193,8 @@ lab-reserve:
       queue-wait-timeout-ms: 30000
       max-context-tokens: 8000
       history-window: 6
+      kb-top-k: 5                # 检索返回条数（与 history-window 无关，别混用）
+      kb-prefetch-factor: 3      # hybrid 每路预取倍数（prefetchK = kb-top-k * 此值）
       tool-max-loops: 5          # v3 reserved: Tool Call 已取消
       # R4 三段式相关性门禁（小语料下 cosine 区分度不够，单一阈值分不开）
       kb-min-score: 0.35         # 兼容字段，等同 kb-reject-score

@@ -11,7 +11,6 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Step 5 · AnswerSynthesizer（答复合成）。
@@ -58,8 +57,8 @@ public class AnswerSynthesizer {
      * @param citations  检索命中的引用（可能为空——上层已在未命中时短路，不会走到这里）
      * @return 正文 chunk 流（增量文本）
      */
-    public Flux<String> stream(String question, List<CitationVO> citations) {
-        String evidence = renderEvidence(citations);
+    public Flux<String> stream(String question, List<CitationVO> citations, List<String> evidenceTexts) {
+        String evidence = renderEvidence(citations, evidenceTexts);
         String userText = """
                 【证据】
                 %s
@@ -88,17 +87,43 @@ public class AnswerSynthesizer {
      *
      * <p>每条格式：{@code [1] 《标题》(类别) 片段原文…}
      */
-    private String renderEvidence(List<CitationVO> citations) {
+    /**
+     * 把引用渲染成带编号的证据文本。
+     *
+     * <p>每条格式：{@code [1] 《标题》(类别) + 完整正文}。
+     * 优先用 {@code evidenceTexts}（完整 chunk 正文）；缺失时退回 200 字 snippet。
+     *
+     * <p><b>为什么必须用完整正文</b>：snippet 只有 200 字，
+     * 而答案常位于 chunk 中段/尾段（如"易燃易爆存放"在 chunk 第 2 章）。
+     * 只给 snippet 会让 LLM 误答"知识库里没有相关内容"——R4 联调踩过。
+     */
+    private String renderEvidence(List<CitationVO> citations, List<String> evidenceTexts) {
         if (citations == null || citations.isEmpty()) {
             return "（无）";
         }
-        return citations.stream()
-                .map(c -> "[%d] 《%s》(%s) %s".formatted(
-                        c.getIndex(),
-                        c.getTitle() == null ? "未命名文档" : c.getTitle(),
-                        c.getCategory() == null ? "-" : c.getCategory(),
-                        c.getSnippet() == null ? "" : c.getSnippet()))
-                .collect(Collectors.joining("\n\n"));
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < citations.size(); i++) {
+            CitationVO c = citations.get(i);
+            String body;
+            if (evidenceTexts != null && i < evidenceTexts.size()
+                    && evidenceTexts.get(i) != null && !evidenceTexts.get(i).isBlank()) {
+                body = evidenceTexts.get(i);
+            } else {
+                body = c.getSnippet() == null ? "" : c.getSnippet();
+            }
+            // 单片上限 2000 字：防止超长 chunk 撑爆 prompt（正常 chunk <= 750 字）
+            if (body.length() > 2000) {
+                body = body.substring(0, 2000) + "…";
+            }
+            sb.append("[").append(c.getIndex()).append("] 《")
+                    .append(c.getTitle() == null ? "未命名文档" : c.getTitle())
+                    .append("》(")
+                    .append(c.getCategory() == null ? "-" : c.getCategory())
+                    .append(")\n")
+                    .append(body)
+                    .append("\n\n");
+        }
+        return sb.toString();
     }
 
     private static String abbreviate(String s) {

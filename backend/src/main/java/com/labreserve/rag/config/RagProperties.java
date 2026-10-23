@@ -95,6 +95,16 @@ public class RagProperties {
         private int maxContextTokens = 8000;
         /** 留给 LLM 的最近对话轮数 */
         private int historyWindow = 6;
+
+        /**
+         * KB 检索返回的切片条数（topK）。
+         * <p>与 {@link #historyWindow} 无关（曾经误用过 historyWindow 当 topK，已修正）。
+         * 值太大 → prompt 变长、引噪声；太小 → 漏召回。5 是 R4 评估集实测较好的值。
+         */
+        private int kbTopK = 5;
+
+        /** Hybrid 检索每路预取条数倍数（prefetchK = kbTopK * this，给 RRF 足够候选） */
+        private int kbPrefetchFactor = 3;
         /** 单次回答 Tool 调用最大循环次数（v3 已取消 Tool Call，保留字段不动） */
         private int toolMaxLoops = 5;
         /**

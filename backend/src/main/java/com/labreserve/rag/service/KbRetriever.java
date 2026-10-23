@@ -64,7 +64,7 @@ public class KbRetriever {
      * @param topK            返回条数
      * @return 引用列表（按 score 降序）；空列表 = 未命中 → 上层硬拒
      */
-    public List<CitationVO> retrieve(String query, int topK) {
+    public RetrievalResult retrieve(String query, int topK) {
         // ① 把问句 embed 成查询向量（dense 路）
         float[] queryVector;
         try {
@@ -104,7 +104,7 @@ public class KbRetriever {
             if (sparseGate.isEmpty()) {
                 log.info("[RAG][KB] dense({}) < 下限({}) 且无 BM25 命中 → 硬拒: query={}",
                         round(gateScore), props.getChat().getKbRejectScore(), abbreviate(query));
-                return List.of();
+                return RetrievalResult.empty();
             }
             log.info("[RAG][KB] dense 未达下限但 BM25 命中，继续走 hybrid: query={} sparseScore={}",
                     abbreviate(query), round(sparseGate.get(0).score()));
@@ -112,7 +112,7 @@ public class KbRetriever {
 
         // ④ Hybrid 排序：dense + sparse 双路 → Qdrant 服务端 RRF 融合
         //    prefetchK 取 topK 的 3 倍，给 RRF 足够候选（只取 topK 会让融合退化为单路）
-        int prefetchK = topK * 3;
+        int prefetchK = topK * Math.max(1, props.getChat().getKbPrefetchFactor());
         List<QdrantAdapter.ScoredChunk> hits = qdrantAdapter.hybridSearch(
                 qdrantAdapter.collectionName(), queryVector,
                 sparse.indices(), sparse.values(), topK, prefetchK);
@@ -120,14 +120,14 @@ public class KbRetriever {
         if (hits.isEmpty()) {
             log.info("[RAG][KB] hybrid 返回空: query={} sparseTerms={}",
                     abbreviate(query), sparse.size());
-            return List.of();
+            return RetrievalResult.empty();
         }
 
         // ⑤ 反查 chunk 原文 + document 标题 → 组装引用
         List<RagChunk> hitChunks = new ArrayList<>(hits.size());
         List<CitationVO> citations = toCitations(hits, hitChunks);
         if (citations.isEmpty()) {
-            return List.of();
+            return RetrievalResult.empty();
         }
 
         // ⑥ 三段式相关性仲裁（R4 核心）
@@ -140,10 +140,10 @@ public class KbRetriever {
         if (!verdict.relevant()) {
             log.info("[RAG][KB] 相关性仲裁未通过({}) → 硬拒: query={}",
                     verdict.reason(), abbreviate(query));
-            return List.of();
+            return RetrievalResult.empty();
         }
 
-        return citations;
+        return new RetrievalResult(citations, evidenceTexts);
     }
 
     /**
@@ -237,6 +237,27 @@ public class KbRetriever {
             return Integer.parseInt(o.toString());
         } catch (NumberFormatException e) {
             return null;
+        }
+    }
+
+    /**
+     * 检索结果。
+     *
+     * <p><b>为什么要分 citations 与 evidenceTexts</b>：
+     * {@link CitationVO#getSnippet()} 是给 UI 展示用的 200 字短片段，
+     * 但合成器 / 相关性判官需要<b>完整 chunk 正文</b>才能看到位于中段/尾段的答案。
+     * 两处混用会导致"检索对了但答不出来"（R4 联调踩过两次）。
+     *
+     * @param citations     引用列表（含 200 字 snippet，用于前端展示与角标）
+     * @param evidenceTexts 与 citations 一一对应的<b>完整</b> chunk 正文（供 LLM 使用）
+     */
+    public record RetrievalResult(List<CitationVO> citations, List<String> evidenceTexts) {
+        public boolean isEmpty() {
+            return citations == null || citations.isEmpty();
+        }
+
+        public static RetrievalResult empty() {
+            return new RetrievalResult(List.of(), List.of());
         }
     }
 
