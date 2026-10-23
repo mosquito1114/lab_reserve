@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -199,6 +200,86 @@ public class QdrantAdapter {
             log.warn("[RAG][Qdrant] deleteByDocVersion 失败 collection={} docId={} v={} err={}",
                     collection, documentId, ingestVersion, e.getMessage());
         }
+    }
+
+    // ------------------------------------------------------------
+    // 数据读取（R3 QUERY 链消费）
+    // ------------------------------------------------------------
+
+    /**
+     * dense 向量检索（QUERY 链 Step 4 的主路径）。
+     *
+     * <p>只搜 {@code status=1}（已启用）的文档，DISABLED 的文档自然不返回。
+     *
+     * @param collection     集合名
+     * @param queryVector    查询向量（1024 维）
+     * @param topK           返回条数
+     * @param scoreThreshold 分数阈值，低于此分不返回（R3 硬拒判定用；传 0 表示不过滤）
+     * @return 命中的点（含 payload）
+     */
+    public List<ScoredChunk> searchDense(String collection, float[] queryVector,
+                                         int topK, double scoreThreshold) {
+        try {
+            Points.SearchPoints request = Points.SearchPoints.newBuilder()
+                    .setCollectionName(collection)
+                    .setVectorName("dense")
+                    .addAllVector(com.google.common.primitives.Floats.asList(queryVector))
+                    .setLimit(topK)
+                    .setScoreThreshold((float) scoreThreshold)
+                    .setWithPayload(Points.WithPayloadSelector.newBuilder().setEnable(true).build())
+                    .setFilter(enabledDocsFilter())
+                    .build();
+
+            List<Points.ScoredPoint> results = await(
+                    client.searchAsync(request, Duration.ofSeconds(30)), Duration.ofSeconds(45));
+
+            List<ScoredChunk> out = new ArrayList<>(results.size());
+            for (Points.ScoredPoint sp : results) {
+                Map<String, Object> payload = new HashMap<>();
+                sp.getPayloadMap().forEach((k, v) -> payload.put(k, fromJsonValue(v)));
+                out.add(new ScoredChunk(sp.getId().getUuid(), sp.getScore(), payload));
+            }
+            log.debug("[RAG][Qdrant] dense 检索: collection={} topK={} 命中={}",
+                    collection, topK, out.size());
+            return out;
+        } catch (Exception e) {
+            throw new BizException(500, "Qdrant dense 检索失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 构造"只搜启用文档"的过滤条件（{@code status=1}）。
+     */
+    private static Common.Filter enabledDocsFilter() {
+        return Common.Filter.newBuilder()
+                .addMust(Common.Condition.newBuilder()
+                        .setField(Common.FieldCondition.newBuilder()
+                                .setKey("status")
+                                .setMatch(Common.Match.newBuilder().setInteger(1L).build())
+                                .build())
+                        .build())
+                .build();
+    }
+
+    /** JsonWithInt.Value → Java Object */
+    private static Object fromJsonValue(JsonWithInt.Value v) {
+        return switch (v.getKindCase()) {
+            case STRING_VALUE -> v.getStringValue();
+            case INTEGER_VALUE -> v.getIntegerValue();
+            case DOUBLE_VALUE -> v.getDoubleValue();
+            case BOOL_VALUE -> v.getBoolValue();
+            default -> null;
+        };
+    }
+
+    /**
+     * 检索命中的点。
+     *
+     * @param pointId Qdrant point UUID
+     * @param score   相似度分数（cosine 越大越近）
+     * @param payload 点 payload（document_id / category / chunk_index 等）
+     */
+    public record ScoredChunk(String pointId, double score, Map<String, Object> payload) {
     }
 
     // ------------------------------------------------------------

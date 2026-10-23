@@ -193,7 +193,8 @@ lab-reserve:
       queue-wait-timeout-ms: 30000
       max-context-tokens: 8000
       history-window: 6
-      tool-max-loops: 5
+      tool-max-loops: 5          # v3 reserved: Tool Call 已取消
+      kb-min-score: 0.35         # 检索硬拒阈值；top1 相似度低于此值 → 不调 LLM 直接拒
     rewrite:
       enabled: true
       timeout-sec: 15

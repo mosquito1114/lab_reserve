@@ -95,8 +95,14 @@ public class RagProperties {
         private int maxContextTokens = 8000;
         /** 留给 LLM 的最近对话轮数 */
         private int historyWindow = 6;
-        /** 单次回答 Tool 调用最大循环次数 */
+        /** 单次回答 Tool 调用最大循环次数（v3 已取消 Tool Call，保留字段不动） */
         private int toolMaxLoops = 5;
+        /**
+         * 检索硬拒阈值（rag-design §12.6）。
+         * <p>top1 相似度低于此值 → 判定"知识库里没有" → 不调 LLM，直接回拒。
+         * R4 根据评估集调优（默认 0.35 对应 cosine 相似度）。
+         */
+        private double kbMinScore = 0.35;
     }
 
     @Getter
