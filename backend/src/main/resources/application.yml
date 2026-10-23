@@ -194,7 +194,11 @@ lab-reserve:
       max-context-tokens: 8000
       history-window: 6
       tool-max-loops: 5          # v3 reserved: Tool Call 已取消
-      kb-min-score: 0.35         # 检索硬拒阈值；top1 相似度低于此值 → 不调 LLM 直接拒
+      # R4 三段式相关性门禁（小语料下 cosine 区分度不够，单一阈值分不开）
+      kb-min-score: 0.35         # 兼容字段，等同 kb-reject-score
+      kb-accept-score: 0.60      # dense 分 >= 此值 → 直接放行（不调 LLM 判相关性）
+      kb-reject-score: 0.35      # dense 分 <  此值 → 直接拒
+                                 # 中间灰区 → LLM 判「证据是否足以回答」(见 RelevanceJudge)
     rewrite:
       enabled: true
       timeout-sec: 15

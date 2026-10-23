@@ -98,11 +98,25 @@ public class RagProperties {
         /** 单次回答 Tool 调用最大循环次数（v3 已取消 Tool Call，保留字段不动） */
         private int toolMaxLoops = 5;
         /**
-         * 检索硬拒阈值（rag-design §12.6）。
-         * <p>top1 相似度低于此值 → 判定"知识库里没有" → 不调 LLM，直接回拒。
-         * R4 根据评估集调优（默认 0.35 对应 cosine 相似度）。
+         * 检索硬拒阈值（rag-design §12.6 / R4 三段式门禁）。
+         *
+         * <p><b>为何是两个值</b>：小语料下 cosine 区分度不够（实测负样本 0.4638 夹在
+         * 正样本 0.4508~0.7121 之间），单一阈值无法分开。改为三段：
+         * <ul>
+         *   <li>{@code >= kbAcceptScore(0.60)} → 明确相关，直接放行</li>
+         *   <li>{@code <  kbRejectScore(0.35)} → 明确不相关，直接拒</li>
+         *   <li>中间灰区 → 调 LLM 判证据是否足以回答（见 RelevanceJudge）</li>
+         * </ul>
+         *
+         * <p>{@code kbMinScore} 保留为兼容字段（等同 rejectScore，R3 旧语义）。
          */
         private double kbMinScore = 0.35;
+
+        /** 灰区上界：dense 分 ≥ 此值直接放行（不调 LLM 判相关性） */
+        private double kbAcceptScore = 0.60;
+
+        /** 灰区下界：dense 分 < 此值直接拒 */
+        private double kbRejectScore = 0.35;
     }
 
     @Getter

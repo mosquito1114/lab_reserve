@@ -220,16 +220,15 @@ public class RagAdminController {
     // 7. 重建
     // --------------------------------------------------------------
 
-    @Operation(summary = "重建索引：ingestVersion +1、全链重跑")
+    @Operation(summary = "重建索引：ingestVersion +1、全链重跑",
+            description = "会清空上一版的 intermediate 文本与 chunk_count，并派发 EXTRACT→...→FINALIZE")
     @RequirePerm(PermissionConst.RAG_DOC_REINDEX)
     @OpLog(module = OperationModule.RAG, type = OperationType.UPDATE,
             content = "重建索引")
     @PostMapping("/reingest")
     public Result<Void> reingest(@RequestBody @Valid ReingestDTO dto) {
-        // 入参复用 ReingestDTO 需要 documentId 字段；实际上没设计 documentId 入参；
-        // 这里把上一条 StepRunPathDTO 合并 ReingestDTO 的设计复用，单独起一个简版 VO。
-        // R1 暂不做，因为 R1 计划是 admin 从文档列表选中后调用。
-        throw BizException.badRequest("R1 reingest 端点请直接 POST /run_step + 从 CREATED 重跑全链（v2.1 决定未排 reingest 到 R1 验收之后）");
+        ragDocumentService.reingest(dto.getDocumentId(), dto);
+        return Result.ok();
     }
 
     // --------------------------------------------------------------

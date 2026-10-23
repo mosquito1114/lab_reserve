@@ -54,6 +54,9 @@ public class KbRetriever {
     @Autowired
     private RagProperties props;
 
+    @Autowired
+    private RelevanceJudge relevanceJudge;
+
     /**
      * 检索知识库。
      *
@@ -81,24 +84,29 @@ public class KbRetriever {
         //      即使库里完全没相关内容，也会有东西排第一拿 0.016 分。
         //      所以阈值判断必须用 **dense 的 cosine 分**（绝对量，阈值 0.35 有意义），
         //      RRF 只负责排序（融合），不参与命中判定。
-        double minScore = props.getChat().getKbMinScore();
+        //
+        //    ★ 进一步（R4 实证）：小语料下 cosine 区分度仍不够——
+        //      负样本 0.4638 夹在正样本 0.4508~0.7121 中间，单一阈值分不开。
+        //      所以采用三段式：高分放行 / 低分拒 / 灰区调 LLM 判相关性
+        //      （见 RelevanceJudge）。
 
-        //   3.1 dense 语义门禁：cosine >= minScore 才算"语义上相关"
+        //   3.1 dense 门禁分（取 top1 cosine，不设阈值先拿到分）
         List<QdrantAdapter.ScoredChunk> denseGate =
-                qdrantAdapter.searchDense(qdrantAdapter.collectionName(), queryVector, 1, minScore);
+                qdrantAdapter.searchDense(qdrantAdapter.collectionName(), queryVector, 1, 0.0d);
+        double gateScore = denseGate.isEmpty() ? 0.0d : denseGate.get(0).score();
+        log.info("[RAG][KB] dense 门禁分: {} query={}", round(gateScore), abbreviate(query));
 
-        if (denseGate.isEmpty()) {
-            //   3.2 dense 没过门禁 → 用 BM25 兼底（型号/编号/术语类的"字面精确匹配"）
-            //       dense 对这类问句语义分可能很低，但 BM25 能精确命中
+        //   3.2 dense 分数过低 → 用 BM25 兼底（型号/编号/术语类的字面精确匹配）
+        if (gateScore < props.getChat().getKbRejectScore()) {
             List<QdrantAdapter.ScoredChunk> sparseGate =
                     qdrantAdapter.searchSparse(qdrantAdapter.collectionName(),
                             sparse.indices(), sparse.values(), 1);
             if (sparseGate.isEmpty()) {
-                log.info("[RAG][KB] 双路均未命中,硬拒: query={} (dense<{}, 无 BM25 命中)",
-                        abbreviate(query), minScore);
+                log.info("[RAG][KB] dense({}) < 下限({}) 且无 BM25 命中 → 硬拒: query={}",
+                        round(gateScore), props.getChat().getKbRejectScore(), abbreviate(query));
                 return List.of();
             }
-            log.info("[RAG][KB] dense 未过门禁但 BM25 命中，继续走 hybrid: query={} sparseScore={}",
+            log.info("[RAG][KB] dense 未达下限但 BM25 命中，继续走 hybrid: query={} sparseScore={}",
                     abbreviate(query), round(sparseGate.get(0).score()));
         }
 
@@ -116,13 +124,33 @@ public class KbRetriever {
         }
 
         // ⑤ 反查 chunk 原文 + document 标题 → 组装引用
-        return toCitations(hits);
+        List<RagChunk> hitChunks = new ArrayList<>(hits.size());
+        List<CitationVO> citations = toCitations(hits, hitChunks);
+        if (citations.isEmpty()) {
+            return List.of();
+        }
+
+        // ⑥ 三段式相关性仲裁（R4 核心）
+        //    灰区调 LLM 判「证据是否足以回答」，避免小语料下 cosine 误放行
+        //    ★ 必须传完整 chunk 正文给判官（不是 UI 用的 200 字 snippet），
+        //      否则答案在 chunk 中段/尾段时会被误判为不相关（联调踩过）
+        List<String> evidenceTexts = hitChunks.stream().map(RagChunk::getContent).toList();
+        RelevanceJudge.Verdict verdict =
+                relevanceJudge.judge(query, gateScore, evidenceTexts, citations);
+        if (!verdict.relevant()) {
+            log.info("[RAG][KB] 相关性仲裁未通过({}) → 硬拒: query={}",
+                    verdict.reason(), abbreviate(query));
+            return List.of();
+        }
+
+        return citations;
     }
 
     /**
      * 把 Qdrant 命中点转成引用列表（含原文片段与标题）。
      */
-    private List<CitationVO> toCitations(List<QdrantAdapter.ScoredChunk> hits) {
+    private List<CitationVO> toCitations(List<QdrantAdapter.ScoredChunk> hits,
+                                        List<RagChunk> outChunks) {
         List<CitationVO> citations = new ArrayList<>(hits.size());
         // 反查用的 documentId 集合（批量查标题，避免 N+1）
         Map<Long, RagDocument> docCache = new LinkedHashMap<>();
@@ -164,6 +192,7 @@ public class KbRetriever {
             vo.setSnippet(truncate(chunk.getContent(), 200));
             vo.setScore(round(hit.score()));
             citations.add(vo);
+            outChunks.add(chunk);
         }
         return citations;
     }

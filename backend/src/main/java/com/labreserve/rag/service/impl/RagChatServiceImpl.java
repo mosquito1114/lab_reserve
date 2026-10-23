@@ -160,12 +160,13 @@ public class RagChatServiceImpl implements RagChatService {
                         intent);
 
                 case OUT_OF_SCOPE -> templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
-                        "这个问题属于**业务操作**，需要你在系统页面上完成，AI 无法代为处理。\n\n"
-                                + "你可以这样操作：\n"
-                                + "· 查/取消我的预约 → 【预约管理】页面\n"
-                                + "· 查我的实验课表 → 【我的课表】页面\n"
-                                + "· 查报修进度 → 【设备运维】页面\n\n"
-                                + "如果你问的是**相关规定**（比如预约规则、取消时限），我可以帮你查知识库。",
+                        "抱歉，这个问题我无法回答。\n\n"
+                                + "我是实验室预约系统的知识库问答助手，能干两类事：\n"
+                                + "① 回答规章制度 / 操作手册 / 实验 SOP / 常见问题（知识库内容）\n"
+                                + "② 你问的问题如果属于**系统业务操作**，请到对应页面完成：\n"
+                                + "   · 查/取消预约 → 【预约管理】\n"
+                                + "   · 我的实验课表 → 【我的课表】\n"
+                                + "   · 报修进度 → 【设备运维】",
                         intent);
 
                 case CHITCHAT -> templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
