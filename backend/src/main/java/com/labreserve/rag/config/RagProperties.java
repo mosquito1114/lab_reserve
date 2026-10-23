@@ -140,5 +140,9 @@ public class RagProperties {
         private String embeddingModel = "text-embedding-v3";
         /** HTTP 超时（秒） */
         private int timeoutSeconds = 30;
+        /** 采样温度：低温度 → 引用类回答更稳定 */
+        private double temperature = 0.2;
+        /** 单次回答最大 token 数 */
+        private int maxTokens = 2000;
     }
 }
