@@ -3,6 +3,7 @@ package com.labreserve.config;
 import com.labreserve.security.JwtAuthenticationFilter;
 import com.labreserve.security.RestAccessDeniedHandler;
 import com.labreserve.security.RestAuthenticationEntryPoint;
+import jakarta.servlet.DispatcherType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -76,6 +77,17 @@ public class SecurityConfig {
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(registry -> registry
+                        // ---------- 异步派发放行（RAG SSE 必需的修正）----------
+                        // Tomcat 在异步响应（SseEmitter / StreamingResponseBody）写完以后，
+                        // 会做一次 ASYNC dispatch 重新走过滤器链。
+                        // 但 SecurityContext 是 ThreadLocal，异步线程里是空的，
+                        // JwtAuthenticationFilter 的 shouldNotFilterAsyncDispatch() 又默认跳过 ASYNC，
+                        // 于是 anyRequest().authenticated() 会把这次“收尾 dispatch”判成未认证，
+                        // 抛 AccessDeniedException；而响应已经 committed，
+                        // 结果是连接被中止、chunked 缺终止块（前端 fetch 直接报错）。
+                        //
+                        // 语义上这是**同一个请求的续传**，原始请求已经鉴权过，不应重复鉴权。
+                        .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                         .requestMatchers(PERMIT_ALL).permitAll()
                         .anyRequest().authenticated())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
