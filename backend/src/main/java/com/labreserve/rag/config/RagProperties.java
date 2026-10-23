@@ -48,6 +48,9 @@ public class RagProperties {
     /** 提示词文件位置（R5 启用） */
     private Prompt prompt = new Prompt();
 
+    /** 失败自动续跑配置（R5） */
+    private Recovery recovery = new Recovery();
+
     /**
      * LLM 客户端配置 (R2 起, 供 {@code DashScopeEmbeddingClient} 用).
      * 聊天仍走 Spring AI {@code spring.ai.openai.*}; embedding 因为 Spring AI 1.0 GA
@@ -153,6 +156,23 @@ public class RagProperties {
         private String rewrite;
         private String intent;
         private String answer;
+    }
+
+    /**
+     * 失败自动续跑（{@code RecoveryRunner}）。
+     *
+     * <p>扫描 {@code tb_rag_document.pipeline_state = FAILED} 的文档，
+     * 在 {@code ingest.retry-attempts} 与 {@code retry-backoff-ms} 约束下自动 v+1 重跑。
+     */
+    @Getter
+    @Setter
+    public static class Recovery {
+        /** 总开关（关闭后只保留 admin 手动 /run_step） */
+        private boolean enabled = true;
+        /** 扫描间隔（ms），默认 5 分钟 */
+        private long intervalMs = 300_000L;
+        /** 启动后延迟多久开始第一次扫描（ms），默认 1 分钟 */
+        private long initialDelayMs = 60_000L;
     }
 
     @Getter
