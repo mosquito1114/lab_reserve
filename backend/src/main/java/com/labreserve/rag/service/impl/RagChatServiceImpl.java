@@ -107,10 +107,15 @@ public class RagChatServiceImpl implements RagChatService {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    /** 发起提问者信息（在 HTTP 线程捕获，避免异步 SSE 线程读不到 SecurityContext） */
+    public record CallerInfo(Long userId, String roleCode) {
+    }
+
     @Override
     public Flux<RagStreamItem> chat(ChatSendDTO dto) {
         Long userId = securityUtils.getUserId();
         BizException.requireFound(userId, "未登录");
+        CallerInfo caller = new CallerInfo(userId, securityUtils.getRoleCode());
         String traceId = TraceIdUtil.newId();
         MDC.put("traceId", traceId);
 
@@ -148,13 +153,13 @@ public class RagChatServiceImpl implements RagChatService {
 
             // ---------- 分叉 ----------
             return switch (intent.dominant()) {
-                case UNSAFE -> templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded,
+                case UNSAFE -> templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
                         "抱歉，这个请求我无法处理。\n\n"
                                 + "我是实验室预约系统的知识库问答助手，只回答规章制度、操作手册、"
                                 + "实验 SOP 和常见问题方面的问题。",
                         intent);
 
-                case OUT_OF_SCOPE -> templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded,
+                case OUT_OF_SCOPE -> templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
                         "这个问题属于**业务操作**，需要你在系统页面上完成，AI 无法代为处理。\n\n"
                                 + "你可以这样操作：\n"
                                 + "· 查/取消我的预约 → 【预约管理】页面\n"
@@ -163,7 +168,7 @@ public class RagChatServiceImpl implements RagChatService {
                                 + "如果你问的是**相关规定**（比如预约规则、取消时限），我可以帮你查知识库。",
                         intent);
 
-                case CHITCHAT -> templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded,
+                case CHITCHAT -> templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
                         "你好！我是实验室预约系统的智能问答助手。\n\n"
                                 + "我可以帮你查询知识库里的内容，例如：\n"
                                 + "· 实验室安全规定有哪些要求\n"
@@ -172,8 +177,8 @@ public class RagChatServiceImpl implements RagChatService {
                                 + "有什么想了解的，直接问我就行。",
                         intent);
 
-                case DOCS -> retrievalBranch(session, userMsg, traceId, startMs, userId,
-                        intent, rewritten.question(), context, usedTokens, degraded);
+                case DOCS -> retrievalBranch(session, userMsg, traceId, startMs, caller,
+                        intent, rewritten.question(), usedTokens, degraded);
             };
         }).doFinally(signal -> {
             MDC.remove("traceId");
@@ -188,9 +193,8 @@ public class RagChatServiceImpl implements RagChatService {
     // ============================================================
 
     private Flux<RagStreamItem> retrievalBranch(RagSession session, RagMessage userMsg, String traceId,
-                                               long startMs, Long userId, Intent intent,
+                                               long startMs, CallerInfo caller, Intent intent,
                                                String rewrittenQuestion,
-                                               com.labreserve.rag.service.ContextLoaderService.LoadedContext context,
                                                AtomicInteger usedTokens, AtomicBoolean degraded) {
         // ---- Step 4 检索 ----
         List<CitationVO> citations;
@@ -199,14 +203,14 @@ public class RagChatServiceImpl implements RagChatService {
         } catch (Exception e) {
             log.warn("[RAG][CHAT] 检索异常,降级为拒答: {}", e.getMessage());
             degraded.set(true);
-            return templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded,
+            return templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
                     "AI 服务暂时繁忙，请稍后再试。", intent);
         }
 
         // ---- 未命中硬拒（零幻觉，不调 LLM）----
         if (citations == null || citations.isEmpty()) {
             log.info("[RAG][CHAT] 检索未命中,硬拒不调 LLM: sessionId={}", session.getId());
-            return templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded,
+            return templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
                     "抱歉，我没在实验室知识库里找到相关说明。\n\n"
                             + "你可以试试问得更具体一些，比如：\n"
                             + "· 「危险化学品怎么存放」\n"
@@ -224,7 +228,7 @@ public class RagChatServiceImpl implements RagChatService {
         } catch (Exception e) {
             log.warn("[RAG][CHAT] 合成建立失败,降级: {}", e.getMessage());
             degraded.set(true);
-            return templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded,
+            return templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
                     "回答生成失败，请重新提问。", intent);
         }
 
@@ -244,7 +248,8 @@ public class RagChatServiceImpl implements RagChatService {
             }
             String answer = buffer.toString();
             int cost = (int) (System.currentTimeMillis() - startMs);
-            Long assistantMsgId = persistAssistant(session, answer, citations, traceId, cost, userId, intent);
+            Long assistantMsgId = persistAssistant(session, answer, citations, traceId, cost, caller, intent,
+                    degraded.get());
 
             RagStreamItem citationItem = new RagStreamItem(
                     RagStreamItem.Kind.CITATION, null, citations, null, null, null, null, null);
@@ -266,13 +271,14 @@ public class RagChatServiceImpl implements RagChatService {
 
     private Flux<RagStreamItem> templateAnswer(RagSession session, RagMessage userMsg, String traceId,
                                               long startMs, AtomicInteger usedTokens,
-                                              AtomicBoolean degraded, String answer, Intent intent) {
+                                              AtomicBoolean degraded, CallerInfo caller,
+                                              String answer, Intent intent) {
         int cost = (int) (System.currentTimeMillis() - startMs);
         // 模板答案当作"一次性正文"发（前端仍走 chunk 渲染，保持 UI 一致）
         RagStreamItem chunk = new RagStreamItem(
                 RagStreamItem.Kind.CHUNK, answer, null, null, null, null, null, null);
-        Long assistantMsgId = persistAssistant(session, answer, List.of(), traceId, cost,
-                securityUtils.getUserId(), intent);
+        Long assistantMsgId = persistAssistant(session, answer, List.of(), traceId, cost, caller, intent,
+                degraded.get());
         RagStreamItem message = new RagStreamItem(
                 RagStreamItem.Kind.MESSAGE, null, List.of(), assistantMsgId, usedTokens.get(), cost, null, null);
         RagStreamItem done = new RagStreamItem(
@@ -293,7 +299,8 @@ public class RagChatServiceImpl implements RagChatService {
     // ============================================================
 
     private Long persistAssistant(RagSession session, String answer, List<CitationVO> citations,
-                                  String traceId, int costMs, Long userId, Intent intent) {
+                                  String traceId, int costMs, CallerInfo caller, Intent intent,
+                                  boolean degraded) {
         // 流式后置脱敏（第③道墙）：手机号 + 身份证
         String safe = sensitiveUtils.maskInText(answer);
 
@@ -310,14 +317,14 @@ public class RagChatServiceImpl implements RagChatService {
 
         // usage 统计
         RagUsageStats stats = new RagUsageStats();
-        stats.setUserId(userId);
-        stats.setRoleCode(securityUtils.getRoleCode());
+        stats.setUserId(caller.userId());
+        stats.setRoleCode(caller.roleCode() == null ? "UNKNOWN" : caller.roleCode());
         stats.setIntent(intent == null ? "DOCS" : intent.dominant().name());
         stats.setUsedTokens(0); // R3 未接真实 token 计费，先记 0
         stats.setDocHits(citations == null ? 0 : citations.size());
         stats.setToolCalls(0); // v3 reserved
         stats.setCostMs(costMs);
-        stats.setDegraded(0);
+        stats.setDegraded(degraded ? 1 : 0);
         usageStatsMapper.insert(stats);
 
         return msg.getId();
