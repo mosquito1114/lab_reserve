@@ -71,8 +71,15 @@ public class RagProperties {
         private int chunkMaxChars = 500;
         /** 切窗重叠 */
         private int chunkOverlap = 100;
-        /** Embedding 批大小 */
-        private int embedBatchSize = 16;
+        /**
+         * Embedding 单批条数。
+         *
+         * <p><b>上限 10</b>：DashScope text-embedding-v3 的 compatible-mode 接口
+         * 对 {@code input.contents} 有 batch ≤ 10 的硬限制，
+         * 超过会返回 {@code 400 InvalidParameter: batch size is invalid}。
+         * 客户端（DashScopeEmbeddingClient）内部还会再兜一次，配置写大也不会炸。
+         */
+        private int embedBatchSize = 10;
         /** 失败重试次数 */
         private int retryAttempts = 3;
         /** 失败重试退避（ms） */

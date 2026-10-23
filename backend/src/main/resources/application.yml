@@ -184,7 +184,7 @@ lab-reserve:
       chunk-default: RECURSIVE           # RECURSIVE / QA / FIXED_OVERLAP（与 LangChain/LlamaIndex 对齐）
       chunk-max-chars: 500
       chunk-overlap: 100
-      embed-batch-size: 16
+      embed-batch-size: 10          # DashScope text-embedding-v3 上限 10，别调大
       retry-attempts: 3
       retry-backoff-ms: 1000
     chat:

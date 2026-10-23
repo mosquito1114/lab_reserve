@@ -58,6 +58,15 @@ import java.util.List;
 @Component
 public class DashScopeEmbeddingClient {
 
+    /**
+     * DashScope embedding 接口的硬限制：单次请求 {@code input} 最多 10 条。
+     * 超过会返回 400 InvalidParameter（"batch size is invalid, it should not be larger than 10"）。
+     *
+     * <p>这里在客户端内部再兜一层：调用方传多少都行，本类自己拆成 ≤10 的批次。
+     * 这样即使 application.yml 或文档级配置写大了，也不会让整条摄取链路失败。
+     */
+    private static final int MAX_BATCH = 10;
+
     @Autowired
     private RagProperties props;
 
@@ -87,6 +96,25 @@ public class DashScopeEmbeddingClient {
         if (inputs == null || inputs.isEmpty()) {
             return List.of();
         }
+        // 超过 API 上限就自动拆批，按原顺序拼回结果
+        if (inputs.size() > MAX_BATCH) {
+            List<float[]> all = new ArrayList<>(inputs.size());
+            for (int i = 0; i < inputs.size(); i += MAX_BATCH) {
+                int end = Math.min(i + MAX_BATCH, inputs.size());
+                List<float[]> part = doEmbed(inputs.subList(i, end));
+                if (part.size() != end - i) {
+                    throw new BizException(500,
+                            "DashScope embedding 分批结果数量不一致（批次 " + i + "-" + end + "）");
+                }
+                all.addAll(part);
+            }
+            return all;
+        }
+        return doEmbed(inputs);
+    }
+
+    /** 真正发一次 HTTP 请求（入参长度必须 ≤ {@link #MAX_BATCH}） */
+    private List<float[]> doEmbed(List<String> inputs) {
         try {
             // 构造 request body
             var node = mapper.createObjectNode();
