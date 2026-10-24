@@ -10,7 +10,7 @@
 
     <!-- ---------- 业务概览：有 stat:view 的角色可见 ---------- -->
     <el-row v-if="canStat" :gutter="16" class="overview-row">
-      <el-col :xs="24" :sm="12" :md="6" v-for="card in overviewCards" :key="card.label">
+      <el-col :xs="24" :sm="12" :lg="6" v-for="card in overviewCards" :key="card.label">
         <el-card
           shadow="never"
           class="overview-card"
@@ -342,13 +342,20 @@ onMounted(() => {
 }
 
 .overview-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
   font-size: var(--lr-font-sm);
   color: var(--lr-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .overview-badge {
+  flex-shrink: 0;
   padding: 1px 8px;
   margin-left: auto;
+  white-space: nowrap;
   font-size: var(--lr-font-xs);
   color: var(--lr-primary);
   background: var(--lr-primary-soft);

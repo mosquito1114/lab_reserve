@@ -36,7 +36,7 @@
     </el-card>
 
     <el-row :gutter="12" class="stat-row">
-      <el-col :span="6" v-for="card in cards" :key="card.label">
+      <el-col :xs="24" :sm="12" :lg="6" v-for="card in cards" :key="card.label">
         <el-card shadow="never" class="stat-card">
           <div class="stat-label">{{ card.label }}</div>
           <div class="stat-value tabular">{{ card.value }}</div>
@@ -46,12 +46,12 @@
     </el-row>
 
     <el-row :gutter="12" v-loading="loading">
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <el-card shadow="never" header="资源占用率（Top 10 实验室）">
           <div ref="occupancyRef" class="chart" />
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <el-card shadow="never" header="实验类型占比">
           <div ref="typeRef" class="chart" />
         </el-card>
@@ -59,12 +59,12 @@
     </el-row>
 
     <el-row :gutter="12" class="mt-16">
-      <el-col :span="10">
+      <el-col :xs="24" :lg="10">
         <el-card shadow="never" header="预约成功率">
           <div ref="successRef" class="chart" />
         </el-card>
       </el-col>
-      <el-col :span="14">
+      <el-col :xs="24" :lg="14">
         <el-card shadow="never">
           <template #header>
             <div class="chart-header">
