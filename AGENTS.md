@@ -197,6 +197,7 @@ cd frontend && npm run build && npm run type-check
 1. **实验室预约主体收窄为教师**（`agents/req.md` §10 变更 1）：`resourceType=1` 只有 `TEACHER` 能约，且必须带 `classIds`；学生只看「我的实验课表」（反查 `tb_reservation_class`）；设备师生都能约。
 2. **LAB_ADMIN 权限收窄到本职**（`agents/req.md` §10 变更 2）：只有资源维护 + 预约/调整审批 + 排队调度 + 报修验收；**没有**用户、班级、操作日志、邮件投递记录；查看完整手机号的例外只剩 `SYS_ADMIN`。
 3. **角色 / 账号 / 学号工号不可修改**：`/user/update` 不含这些字段，换角色需注销后重建。
+   **个人头像上传不做**（变更 4）：个人中心只用姓名首字生成头像，`/api/file/upload` 只服务故障截图。
 4. **邮件通知默认关闭**（`notify_email=0`），由用户在个人中心自行开启；**全部演示账号密码统一 `123456`（含 admin）**。
 5. **资源变更必须留痕**：实验室/设备的 `create` / `update` / `update_status` 都强制带 `updateReason`，
    由 `ResourceLogService` 写 `tb_resource_update_log`（before/after 快照）；字典（实验类型/时段）被引用时禁止删除（409）。
