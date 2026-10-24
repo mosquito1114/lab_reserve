@@ -63,6 +63,36 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '操作日志', icon: 'Document', permission: 'system:log:list' }
       },
       {
+        path: 'reservation/apply',
+        name: 'ReservationApply',
+        component: () => import('@/views/reservation/ApplyView.vue'),
+        meta: { title: '预约申请', icon: 'EditPen', permission: 'reservation:equipment:create' }
+      },
+      {
+        path: 'reservation/my',
+        name: 'ReservationMy',
+        component: () => import('@/views/reservation/MyReservationView.vue'),
+        meta: { title: '我的预约', icon: 'List', permission: 'reservation:list' }
+      },
+      {
+        path: 'reservation/timetable',
+        name: 'ReservationTimetable',
+        component: () => import('@/views/reservation/TimetableView.vue'),
+        meta: { title: '我的实验课表', icon: 'Notebook', permission: 'reservation:timetable' }
+      },
+      {
+        path: 'reservation/audit',
+        name: 'ReservationAudit',
+        component: () => import('@/views/reservation/AuditView.vue'),
+        meta: { title: '预约审核', icon: 'Checked', permission: 'reservation:audit' }
+      },
+      {
+        path: 'reservation/change-audit',
+        name: 'ReservationChangeAudit',
+        component: () => import('@/views/reservation/ChangeAuditView.vue'),
+        meta: { title: '调整审批', icon: 'RefreshRight', permission: 'change:audit' }
+      },
+      {
         path: 'resource/laboratory',
         name: 'ResourceLaboratory',
         component: () => import('@/views/resource/LaboratoryView.vue'),
@@ -119,7 +149,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '知识库管理', icon: 'Files', permission: 'rag:doc:list' }
       }
       // ↓↓↓ 后续迭代在此按模块追加子路由 ↓↓↓
-      // 预约管理：/reservation/apply  /reservation/my  /reservation/audit  /reservation/change-audit
       // 排队候补：/queue/my  /queue/ban
       // 设备运维：/repair/apply  /repair/my  /repair/order  /repair/task
       // 数据统计：/statistics

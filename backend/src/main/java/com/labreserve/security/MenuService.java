@@ -37,7 +37,7 @@ public class MenuService {
             new MenuDef("/profile", "个人中心", "User", null)
     );
 
-    /** 需要权限的分组菜单（迭代 2 系统管理 → 4 资源管理 → 3 消息通知 → R5 智能问答） */
+    /** 需要权限的分组菜单（迭代 2 系统管理 → 4 资源管理 → 3 消息通知 → 5 预约管理 → R5 智能问答） */
     private static final List<GroupDef> GROUPS = List.of(
             new GroupDef("/system", "系统管理", "Setting", List.of(
                     new MenuDef("/system/user", "用户管理", "UserFilled", PermissionConst.USER_LIST),
@@ -51,6 +51,13 @@ public class MenuService {
                     new MenuDef("/resource/dict", "字典维护", "Collection", PermissionConst.DICT_MANAGE),
                     new MenuDef("/resource/log", "资源更新日志", "Tickets", PermissionConst.RESOURCE_LOG_LIST),
                     new MenuDef("/resource/availability", "资源可用性", "Calendar", PermissionConst.RESOURCE_LAB_LIST)
+            )),
+            new GroupDef("/reservation", "预约管理", "Calendar", List.of(
+                    new MenuDef("/reservation/apply", "预约申请", "EditPen", PermissionConst.RESERVATION_EQUIPMENT_CREATE),
+                    new MenuDef("/reservation/my", "我的预约", "List", PermissionConst.RESERVATION_LIST),
+                    new MenuDef("/reservation/timetable", "我的实验课表", "Notebook", PermissionConst.RESERVATION_TIMETABLE),
+                    new MenuDef("/reservation/audit", "预约审核", "Checked", PermissionConst.RESERVATION_AUDIT),
+                    new MenuDef("/reservation/change-audit", "调整审批", "RefreshRight", PermissionConst.CHANGE_AUDIT)
             )),
             new GroupDef("/message", "消息通知", "Bell", List.of(
                     new MenuDef("/message/inbox", "消息中心", "ChatDotRound", PermissionConst.MESSAGE_LIST),
