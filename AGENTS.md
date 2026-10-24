@@ -221,6 +221,8 @@ cd frontend && npm run build && npm run type-check
 
 - 权限是数据（`tb_role_permission`），缓存 `lab:reserve:perm:role:{roleId}`，权限变更后由 `PermissionService` 删缓存。
 - 现存权限点 **59 个**（含 `system:monitor:view`、`message:send`）；各角色：SYS_ADMIN 23 / LAB_ADMIN 27 / STUDENT 15 / TEACHER 15 / MAINTAINER 6。
+- 定时任务：邮件消费/重投/死信、候补超时扫描、**预约过期扫描（`APPROVED → EXPIRED`，每小时）**、
+  未读数校正、已删消息清理、排队 ZSet 对账（见 `docs/04-部署与运维手册.md` §8）。
 - 迁移：`V1` 建表 → `V2` RAG 6 表 + 6 权限 → `V3` 修 RAG 授权 → `V4` `system:monitor:view` → `V5` 收窄 LAB_ADMIN → `V6` `message:send`。**新增结构请写 V7+，不要改已执行过的脚本**。
 - 表：24 张业务表（`tb_` 前缀）+ 6 张 RAG 表。
 - 手机号：明文存储、接口层脱敏；本人看自己明文；`revealPhone=true` + `user:view-phone` 才给明文，并写 `QUERY_PHONE` 日志。
