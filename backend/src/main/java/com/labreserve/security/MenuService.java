@@ -37,7 +37,7 @@ public class MenuService {
             new MenuDef("/profile", "个人中心", "User", null)
     );
 
-    /** 需要权限的分组菜单（迭代 2 系统管理 → 4 资源管理 → 3 消息通知 → 5 预约管理 → 6 排队候补 → R5 智能问答） */
+    /** 需要权限的分组菜单（迭代 2 系统管理 → 4 资源管理 → 3 消息通知 → 5 预约管理 → 6 排队候补 → 7 设备运维 → R5 智能问答） */
     private static final List<GroupDef> GROUPS = List.of(
             new GroupDef("/system", "系统管理", "Setting", List.of(
                     new MenuDef("/system/user", "用户管理", "UserFilled", PermissionConst.USER_LIST),
@@ -58,6 +58,12 @@ public class MenuService {
                     new MenuDef("/reservation/timetable", "我的实验课表", "Notebook", PermissionConst.RESERVATION_TIMETABLE),
                     new MenuDef("/reservation/audit", "预约审核", "Checked", PermissionConst.RESERVATION_AUDIT),
                     new MenuDef("/reservation/change-audit", "调整审批", "RefreshRight", PermissionConst.CHANGE_AUDIT)
+            )),
+            new GroupDef("/repair", "设备运维", "Tools", List.of(
+                    new MenuDef("/repair/apply", "我要报修", "Tools", PermissionConst.REPAIR_CREATE),
+                    new MenuDef("/repair/my", "我的报修", "Tickets", null),
+                    new MenuDef("/repair/order", "工单管理", "DocumentChecked", PermissionConst.REPAIR_LIST),
+                    new MenuDef("/repair/task", "我的维修任务", "SetUp", PermissionConst.REPAIR_LIST_ASSIGNED)
             )),
             new GroupDef("/queue", "排队候补", "Timer", List.of(
                     new MenuDef("/queue/my", "我的排队", "Timer", PermissionConst.QUEUE_CREATE),

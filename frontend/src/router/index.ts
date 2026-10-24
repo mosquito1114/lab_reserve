@@ -93,6 +93,30 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '调整审批', icon: 'RefreshRight', permission: 'change:audit' }
       },
       {
+        path: 'repair/apply',
+        name: 'RepairApply',
+        component: () => import('@/views/repair/ApplyView.vue'),
+        meta: { title: '我要报修', icon: 'Tools', permission: 'repair:create' }
+      },
+      {
+        path: 'repair/my',
+        name: 'RepairMy',
+        component: () => import('@/views/repair/MyRepairView.vue'),
+        meta: { title: '我的报修', icon: 'Tickets' }
+      },
+      {
+        path: 'repair/order',
+        name: 'RepairOrder',
+        component: () => import('@/views/repair/RepairOrderView.vue'),
+        meta: { title: '工单管理', icon: 'DocumentChecked', permission: 'repair:list' }
+      },
+      {
+        path: 'repair/task',
+        name: 'RepairTask',
+        component: () => import('@/views/repair/MyTaskView.vue'),
+        meta: { title: '我的维修任务', icon: 'SetUp', permission: 'repair:list-assigned' }
+      },
+      {
         path: 'queue/my',
         name: 'QueueMy',
         component: () => import('@/views/queue/MyQueueView.vue'),
@@ -167,7 +191,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '知识库管理', icon: 'Files', permission: 'rag:doc:list' }
       }
       // ↓↓↓ 后续迭代在此按模块追加子路由 ↓↓↓
-      // 设备运维：/repair/apply  /repair/my  /repair/order  /repair/task
       // 数据统计：/statistics
       // 系统管理：/system/user  /system/role  /system/operation-log
     ]
