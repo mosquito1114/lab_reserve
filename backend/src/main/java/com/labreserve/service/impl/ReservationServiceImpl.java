@@ -3,6 +3,7 @@ package com.labreserve.service.impl;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.labreserve.common.constant.CommonConst;
 import com.labreserve.common.constant.RedisKeyConst;
 import com.labreserve.common.enums.MessageType;
 import com.labreserve.common.exception.BizException;
@@ -15,6 +16,7 @@ import com.labreserve.mapper.ReservationChangeRequestMapper;
 import com.labreserve.mapper.ReservationClassMapper;
 import com.labreserve.mapper.ReservationEquipmentMapper;
 import com.labreserve.mapper.ReservationMapper;
+import com.labreserve.mapper.RoleMapper;
 import com.labreserve.mapper.StudentInfoMapper;
 import com.labreserve.mapper.TeacherInfoMapper;
 import com.labreserve.mapper.TimeSlotMapper;
@@ -32,6 +34,7 @@ import com.labreserve.model.entity.Reservation;
 import com.labreserve.model.entity.ReservationChangeRequest;
 import com.labreserve.model.entity.ReservationClass;
 import com.labreserve.model.entity.ReservationEquipment;
+import com.labreserve.model.entity.Role;
 import com.labreserve.model.entity.StudentInfo;
 import com.labreserve.model.entity.TeacherInfo;
 import com.labreserve.model.entity.TimeSlot;
@@ -118,6 +121,9 @@ public class ReservationServiceImpl implements ReservationService {
 
     @Autowired
     private ClassInfoMapper classInfoMapper;
+
+    @Autowired
+    private RoleMapper roleMapper;
 
     @Autowired
     private ReservationConflictChecker conflictChecker;
@@ -426,6 +432,11 @@ public class ReservationServiceImpl implements ReservationService {
         update.setRejectReason(dto.getReason());
         reservationMapper.updateById(update);
         triggerCandidateAfterRelease(reservation);
+        // 通知所有实验室管理员：待审核列表少了一条，需要让他们知道是谁撤的
+        notifyRole(CommonConst.ROLE_LAB_ADMIN, "预约已撤销",
+                "教师/学生撤销了预约 " + reservation.getReserveNo()
+                        + (StringUtils.hasText(dto.getReason()) ? "，原因：" + dto.getReason() : "")
+                        + "（" + describe(reservation) + "）。", reservation.getId());
         log.info("[预约] 撤销 id={}, reason={}", reservation.getId(), dto.getReason());
     }
 
@@ -495,6 +506,28 @@ public class ReservationServiceImpl implements ReservationService {
                 Integer.valueOf(1).equals(reservation.getResourceType())
                         ? reservation.getLabId() : reservation.getEquipmentId(),
                 reservation.getReserveDate(), reservation.getSlotId()));
+    }
+
+    /** 通知某个角色的所有正常账号 */
+    private void notifyRole(String roleCode, String title, String content, Long bizId) {
+        Role role = roleMapper.selectOne(Wrappers.<Role>lambdaQuery().eq(Role::getCode, roleCode));
+        if (role == null) {
+            return;
+        }
+        List<Long> userIds = userMapper.selectList(Wrappers.<User>lambdaQuery()
+                        .eq(User::getRoleId, role.getId())
+                        .eq(User::getStatus, 1))
+                .stream().map(User::getId).toList();
+        if (userIds.isEmpty()) {
+            return;
+        }
+        afterCommitUtils.run(() -> userIds.forEach(id -> {
+            try {
+                messageService.send(id, MessageType.RESERVATION_AUDIT, title, content, "RESERVATION", bizId);
+            } catch (Exception e) {
+                log.warn("[预约] 通知失败 userId={}, {}", id, e.getMessage());
+            }
+        }));
     }
 
     private String lockKey(Integer resourceType, Long resourceId, LocalDate date, Long slotId) {

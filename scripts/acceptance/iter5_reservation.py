@@ -17,7 +17,9 @@
 
 import datetime
 import json
+import subprocess
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -67,6 +69,28 @@ def menus_of(token):
     return titles, (data.get("permissions") or [])
 
 
+def run_sql(sql):
+    """执行一条 SQL（造/清测试夹具、验过期扫描）；没有 docker 时返回 (False, 原因)。"""
+    cmd = ["docker", "exec", "lab-reserve-mysql", "sh", "-c",
+           f'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N -B -e "use lab_reserve; {sql}"']
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        return proc.returncode == 0, (proc.stdout + proc.stderr).strip()
+    except Exception as e:
+        return False, str(e)
+
+
+_MYSQL_OK = None
+
+
+def mysql_available():
+    global _MYSQL_OK
+    if _MYSQL_OK is None:
+        ok, _ = run_sql("SELECT 1;")
+        _MYSQL_OK = ok
+    return _MYSQL_OK
+
+
 def next_weekday(offset_days):
     """今天 + offset 天，如果落在周末就顺延到下周一（实验室只在工作日开放）"""
     d = datetime.date.today() + datetime.timedelta(days=offset_days)
@@ -89,6 +113,15 @@ def find_free_equip_slot(token, equip_id, day):
         if slot["available"]:
             return slot["slotId"]
     return None
+
+
+def create_reservation(token, lab_id, day, slot_id, class_ids, experiment_type_id, purpose):
+    status, body = call("/reservation/create", {
+        "resourceType": 1, "labId": lab_id, "reserveDate": day, "slotId": slot_id,
+        "usePeople": 20, "experimentTypeId": experiment_type_id,
+        "classIds": class_ids, "courseName": "迭代5验收课程", "purpose": purpose
+    }, token=token)
+    return status, (body.get("data") or {}).get("id")
 
 
 def lab_submit_payload(lab_id, day, slot_id, class_ids, experiment_type_id):
@@ -343,6 +376,62 @@ def main():
     _, body = call("/message/get_page", {"pageNum": 1, "pageSize": 5}, token=teacher)
     titles = [item["title"] for item in (body.get("data") or {}).get("records") or []]
     check("释放后教师收到站内信", any("释放" in t or "调整" in t for t in titles), str(titles))
+
+    # ---------- 8.1 撤销待审核预约 -> 通知实验室管理员 ----------
+    print("\n[8.1] 撤销待审核预约并通知管理员")
+    day_cancel = next_weekday(9).isoformat()
+    slot_cancel = find_free_lab_slot(teacher, 6, day_cancel)
+    _, body = call("/laboratory/get_info", {"id": 6}, token=teacher)
+    lab_cancel = body.get("data") or {}
+    status, res_cancel = create_reservation(teacher, 6, day_cancel, slot_cancel,
+                                            class_ids, lab_cancel.get("experimentTypeId"), "排队验收：撤单通知")
+    if status != 200:
+        check("创建待审核预约（撤单用例）", False, str(status))
+    else:
+        status, _ = call("/reservation/cancel", {"id": res_cancel, "reason": "课程调整"}, token=teacher)
+        check("撤销待审核预约 -> 200", status == 200, f"status={status}")
+        time.sleep(2)
+        _, body = call("/message/get_page", {"pageNum": 1, "pageSize": 10}, token=lab_admin)
+        admin_titles = [item["title"] for item in (body.get("data") or {}).get("records") or []]
+        check("实验室管理员收到「预约已撤销」站内信", any("撤销" in t for t in admin_titles), str(admin_titles))
+
+    # ---------- 8.2 预约过期扫描（APPROVED -> EXPIRED） ----------
+    print("\n[8.2] 预约过期扫描")
+    if not mysql_available():
+        skip("过期扫描：APPROVED → EXPIRED", "docker/mysql 不可用")
+    else:
+        day_future = next_weekday(10).isoformat()
+        slot_past = find_free_lab_slot(teacher, 7, day_future)
+        _, body = call("/laboratory/get_info", {"id": 7}, token=teacher)
+        lab_past = body.get("data") or {}
+        status, res_past = create_reservation(teacher, 7, day_future, slot_past,
+                                              class_ids, lab_past.get("experimentTypeId"), "排队验收：过期用例")
+        if status != 200:
+            skip("过期扫描：APPROVED → EXPIRED", f"无法创建用例：{status}")
+        else:
+            call("/reservation/audit", {"id": res_past, "result": "APPROVED"}, token=lab_admin)
+            day_past = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+            ok, _ = run_sql(f"UPDATE tb_reservation SET reserve_date='{day_past}' WHERE id={res_past};")
+            final_status = None
+            waited = 0
+            while waited < 25 and ok:
+                time.sleep(5)
+                waited += 5
+                _, body = call("/reservation/get_info", {"id": res_past}, token=teacher)
+                final_status = (body.get("data") or {}).get("status")
+                if final_status == "EXPIRED":
+                    break
+            if final_status == "EXPIRED":
+                check(f"过期扫描把 APPROVED 改为 EXPIRED（等待 {waited}s）", True)
+            else:
+                skip("过期扫描：APPROVED → EXPIRED",
+                     "当前扫描间隔默认 1 小时；用 RESERVATION_EXPIRE_INTERVAL_MS=5000 "
+                     "RESERVATION_EXPIRE_INITIAL_DELAY_MS=1000 重启后再跑"
+                     f"（当前状态 {final_status}）")
+            run_sql(f"DELETE FROM tb_reservation_change_request WHERE reservation_id={res_past}; "
+                    f"DELETE FROM tb_reservation_class WHERE reservation_id={res_past}; "
+                    f"DELETE FROM tb_reservation_equipment WHERE reservation_id={res_past}; "
+                    f"DELETE FROM tb_reservation WHERE id={res_past};")
 
     # ---------- 9. 并发 ----------
     print("\n[9] 并发判冲（20 线程抢同一实验室同一时段）")
