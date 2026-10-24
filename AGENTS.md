@@ -168,7 +168,7 @@ cd frontend && npm run build && npm run type-check
 | 5 | 预约管理（预检 / 提交 / 审核 / 调整申请 + 并发判冲） | ✅ 已完成，提交在 `dev`（未合 master） |
 | 6 | 排队与候补（Redis ZSet + 超时顺延 + 7 天禁入） | ✅ 已完成，提交在 `dev`（未合 master） |
 | 7 | 设备运维（报修 → 派单 → 维修 → 验收 + OSS 传图） | ✅ 已完成，提交在 `dev`（未合 master；OSS 凭据在 `.env`） |
-| 8 | 统计报表 + Excel 导出 + 交付文档 | ⬜ 未开始 |
+| 8 | 统计报表 + Excel 导出 + 交付文档 | ✅ 已完成，提交在 `dev`（未合 master；`docs/` 四份文档已补齐） |
 | R0 | RAG 模块骨架（另一批提交，`RAG_ENABLED=false`） | 🟡 骨架在 `dev`，未合 master |
 
 ### 7.2 已实现的接口（全部 `POST` + JSON）
@@ -185,11 +185,12 @@ cd frontend && npm run build && npm run type-check
 | 预约 | `/api/reservation/check` `create` `get_page` `get_my_page` `get_pending_page` `get_info` `audit` `cancel` `release` `get_my_timetable` |
 | 调整申请 | `/api/reservation_change/create` `get_list_by_reservation` `get_page` `audit` `cancel` |
 | 文件 | `/api/file/upload`（multipart，唯一例外；≤5MB，jpg/png/webp，校验文件头魔数） |
+| 统计 | `/api/statistics/get_overview` `get_occupancy` `get_experiment_type_ratio` `get_success_rate` `get_resource_ratio` `get_reservation_trend` `export`（`stat:view` / `stat:export`） |
 | 运维 | `/api/repair_order/create` `get_page` `get_my_submitted_page` `get_my_assigned_page` `get_info` `review` `assign` `update_progress` `complete` `accept`、`/api/repair_record/get_list` |
 | 排队 | `/api/queue/create` `get_my_page` `get_page` `get_info` `get_my_position` `cancel` `confirm` `abandon` `get_notice_list`、`/api/queue_ban/get_my_list` |
 | 消息 | `/api/message/get_page` `get_info` `get_unread_count` `read` `read_all` `delete` `clear` `get_delivery_log_page` `send_test_email` `send`（`message:send`，仅 SYS_ADMIN） |
 
-**尚未实现**：`/api/statistics*`（迭代 8）。
+**尚未实现**：无（7 个业务模块全部完成；RAG 为独立模块，默认关闭）。
 
 ### 7.3 与最初需求不同的地方（必须知道）
 
@@ -211,7 +212,9 @@ cd frontend && npm run build && npm run type-check
    **设备维修不联动作废任何预约**（需求 Q23）。
 10. **文件只走后端中转**：`POST /api/file/upload`（multipart）→ `AliyunOssTemplate` → 返回 OSS URL；
    校验大小（5MB）/ 后缀白名单 / Content-Type / **文件头魔数**；凭据只在 `.env`（`OSS_*`），bucket 需公共读。
-11. **消息只走「统一入口 + Redis Stream」**：业务代码一律调 `MessageService.send(...)`，禁止直接写 `tb_message` 或手动 `XADD`；
+11. **统计口径在后端**：5 种报表与页面共用同一份聚合（`StatisticsServiceImpl`），
+    保证「页面数字 = Excel 数字」；占用率口径 = 已占用时段 / 开放时段，无筛选时缓存 10 分钟。
+12. **消息只走「统一入口 + Redis Stream」**：业务代码一律调 `MessageService.send(...)`，禁止直接写 `tb_message` 或手动 `XADD`；
    邮件状态机 `NULL 未入队 → SENDING 投递中 → OK / DEAD`，`max-retry`（默认 3）是**总投递次数上限**，超过即进 `stream:msg:email:dead`。
 
 ### 7.4 权限与数据现状
@@ -237,10 +240,11 @@ cd frontend && npm run build && npm run type-check
 - 验收脚本：`scripts/acceptance/iter1_auth.py`（62 项）、`iter2_user.py`（48 项）、`iter3_message.py`（59 项）、
   `iter4_resource.py`（62 项）、`iter5_reservation.py`（47 项）；先 `./dev.sh start`，再 `python3 scripts/acceptance/iterX.py`。
 - 并发压测：`python3 scripts/stress/reservation_concurrency.py`（默认 50 并发，验收要求「恰好 1 条成功、其余 409」）。
-- 验收脚本补 `iter7_repair.py`（42 项，会真实上传图片到 OSS）；OSS 联调依赖 `.env` 的 `OSS_ENDPOINT/BUCKET/ACCESS_KEY_ID/ACCESS_KEY_SECRET`。
+- 验收脚本补 `iter7_repair.py`（42 项，会真实上传图片到 OSS）、`iter8_statistics.py`（35 项，含 SQL 对账与导出）；OSS 联调依赖 `.env` 的 `OSS_ENDPOINT/BUCKET/ACCESS_KEY_ID/ACCESS_KEY_SECRET`。
 - 候补超时演示：用 `QUEUE_CANDIDATE_TIMEOUT_MINUTES=1 QUEUE_SCAN_INTERVAL_MS=3000 ./dev.sh restart` 重启后跑
   `python3 scripts/acceptance/iter6_queue.py`（37 项全跑，含超时 → 禁入 → 顺延）；默认 30 分钟配置下该组 SKIP。
 - 邮件联调：`python3 scripts/tools/dev_smtp.py --port 1025`（本地调试 SMTP，邮件落盘 `/tmp/dev_smtp/*.eml`），后端需 `MAIL_HOST=127.0.0.1 MAIL_PORT=1025 MAIL_SMTP_AUTH=false MAIL_SMTP_SSL=false`；QQ 真发只需改 `.env` 的 `MAIL_USERNAME`/`MAIL_PASSWORD`（授权码）后重启。
+- **交付文档**：`docs/01-需求规格说明书.md`、`02-数据库设计说明书.md`、`03-接口文档.md`、`04-部署与运维手册.md`（与实现同步维护）；
 - 需求/设计/接口/计划：`agents/req.md`、`agents/design.md`、`agents/api.md`、`agents/plan.md`（**本机协作稿，不进 Git**，各自带「变更记录 / 自测报告」）。
 - 协作者速查：`instructs/数据库表说明.md`；交付文档在 `docs/`（迭代 8 补齐），RAG 模块另有 `docs/rag-design.md`。
 - **迭代难题档案**：`docs/problem.md` —— 每个迭代记录「最核心的两个难题」（现象/根因/解法/证据/教训），迭代完成后更新；遇到「这个坑好像见过」先翻它。
