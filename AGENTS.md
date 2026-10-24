@@ -246,7 +246,9 @@ cd frontend && npm run build && npm run type-check
 - 验收脚本补 `iter7_repair.py`（42 项，会真实上传图片到 OSS）、`iter8_statistics.py`（35 项，含 SQL 对账与导出）；OSS 联调依赖 `.env` 的 `OSS_ENDPOINT/BUCKET/ACCESS_KEY_ID/ACCESS_KEY_SECRET`。
 - 候补超时演示：用 `QUEUE_CANDIDATE_TIMEOUT_MINUTES=1 QUEUE_SCAN_INTERVAL_MS=3000 ./dev.sh restart` 重启后跑
   `python3 scripts/acceptance/iter6_queue.py`（37 项全跑，含超时 → 禁入 → 顺延）；默认 30 分钟配置下该组 SKIP。
-- 邮件联调：`python3 scripts/tools/dev_smtp.py --port 1025`（本地调试 SMTP，邮件落盘 `/tmp/dev_smtp/*.eml`），后端需 `MAIL_HOST=127.0.0.1 MAIL_PORT=1025 MAIL_SMTP_AUTH=false MAIL_SMTP_SSL=false`；QQ 真发只需改 `.env` 的 `MAIL_USERNAME`/`MAIL_PASSWORD`（授权码）后重启。
+- 邮件状态：**本机已配置真实 QQ SMTP**（`.env` 的 `MAIL_USERNAME=2629215080@qq.com` + 授权码，凭据不入 Git），
+  `iter3_message.py` 现为 **59/59 全通过、0 跳过**（含真实发信与投递记录）。
+- 邮件联调（无授权码时）：`python3 scripts/tools/dev_smtp.py --port 1025`（本地调试 SMTP，邮件落盘 `/tmp/dev_smtp/*.eml`），后端需 `MAIL_HOST=127.0.0.1 MAIL_PORT=1025 MAIL_SMTP_AUTH=false MAIL_SMTP_SSL=false`；QQ 真发只需改 `.env` 的 `MAIL_USERNAME`/`MAIL_PASSWORD`（授权码）后重启。
 - **交付文档**：`docs/01-需求规格说明书.md`、`02-数据库设计说明书.md`、`03-接口文档.md`、`04-部署与运维手册.md`（与实现同步维护）；
 - 需求/设计/接口/计划：`agents/req.md`、`agents/design.md`、`agents/api.md`、`agents/plan.md`（**本机协作稿，不进 Git**，各自带「变更记录 / 自测报告」）。
 - 协作者速查：`instructs/数据库表说明.md`；交付文档在 `docs/`（迭代 8 补齐），RAG 模块另有 `docs/rag-design.md`。

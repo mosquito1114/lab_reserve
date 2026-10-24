@@ -37,11 +37,25 @@ public class EmailQueueProducer {
             stream.createGroup(RedisKeyConst.STREAM_EMAIL, ReadOffset.from("0"), RedisKeyConst.STREAM_EMAIL_GROUP);
             log.info("[邮件队列] 消费组 {} 已创建", RedisKeyConst.STREAM_EMAIL_GROUP);
         } catch (Exception e) {
-            // BUSYGROUP: 消费组已存在，属正常情况
-            if (e.getMessage() == null || !e.getMessage().contains("BUSYGROUP")) {
+            // BUSYGROUP：消费组已存在，属正常情况。
+            // Lettuce 会把真正的错误包在 cause 里（外层只有 "Error in execution"），所以要沿 cause 链找一次。
+            if (!isBusyGroup(e)) {
                 log.debug("[邮件队列] 消费组检查异常：{}", e.getMessage());
             }
         }
+    }
+
+    /** 判断异常链里是否包含 BUSYGROUP（消费组已存在） */
+    private boolean isBusyGroup(Throwable e) {
+        Throwable cursor = e;
+        while (cursor != null) {
+            String message = cursor.getMessage();
+            if (message != null && message.contains("BUSYGROUP")) {
+                return true;
+            }
+            cursor = cursor.getCause() == cursor ? null : cursor.getCause();
+        }
+        return false;
     }
 
     /**
