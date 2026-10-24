@@ -30,7 +30,7 @@ QDRANT_CONTAINER="lab-reserve-qdrant"
 
 # 注意：不要叫 FRONTEND_PORT —— .env 里也有同名变量（nginx 容器的 80），
 # source .env 会把它覆盖掉，所以这里用 DEV_ 前缀区分。
-DEV_FRONTEND_PORT=5173
+DEV_FRONTEND_PORT=6173
 HEALTH_URL="http://localhost:8080/api/system/health"
 
 # ---------- 输出 ----------
@@ -168,11 +168,13 @@ start_frontend() {
         info "首次运行，安装前端依赖（npm install）…"
         (cd "$ROOT_DIR/frontend" && npm install --no-audit --no-fund)
     fi
-    info "启动前端：npm run dev（日志 → logs/dev-frontend.log）"
+    info "启动前端：npm run dev --port ${DEV_FRONTEND_PORT}（日志 → logs/dev-frontend.log）"
     (
         cd "$ROOT_DIR/frontend" || exit 1
-        nohup npm run dev >"$FRONTEND_LOG" 2>&1 &
+        # 显式传 --port：即使 vite.config 的默认值或环境变量被改，dev.sh 与提示里的端口也保持一致
+        nohup npm run dev -- --port "$DEV_FRONTEND_PORT" --strictPort >"$FRONTEND_LOG" 2>&1 &
         echo $! >"$FRONTEND_PID_FILE"
+        disown || true
     )
     for _ in $(seq 1 30); do
         if curl -fsS "http://localhost:${DEV_FRONTEND_PORT}/" >/dev/null 2>&1; then

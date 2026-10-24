@@ -92,7 +92,7 @@ cd backend
 # 3) 前端
 cd frontend
 npm install
-npm run dev        # http://localhost:5173，/api 通过 vite proxy 转发到 8080
+npm run dev        # http://localhost:6173，/api 通过 vite proxy 转发到 8080
 ```
 
 > 本机没有 Maven 也没关系，仓库自带 Maven Wrapper（`./mvnw`）。

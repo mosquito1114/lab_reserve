@@ -6,7 +6,7 @@ import vue from '@vitejs/plugin-vue'
  * Vite 配置
  *
  * 开发环境（npm run dev）：
- *   - 端口 5173
+ *   - 端口 6173（可用 VITE_DEV_PORT 覆盖）
  *   - /api 代理到后端 8080，避免跨域
  *
  * 生产环境（npm run build）：
@@ -26,7 +26,7 @@ export default defineConfig(({ mode }) => {
     },
 
     server: {
-      port: 5173,
+      port: Number(env.VITE_DEV_PORT || 6173),
       host: true,
       open: false,
       proxy: {
