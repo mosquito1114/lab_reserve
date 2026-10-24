@@ -53,6 +53,11 @@ def check(name, ok, detail=""):
     print(("  [OK] " if ok else "  [FAIL] ") + name + ("" if ok else f"  -> {detail}"))
 
 
+def skip(name, reason):
+    skipped.append((name, reason))
+    print(f"  [SKIP] {name}  ->  {reason}")
+
+
 def login(username):
     status, body = call("/auth/login", {"username": username, "password": "123456"})
     return (body.get("data") or {}).get("accessToken")
@@ -115,12 +120,15 @@ def find_free_equip_slot(token, equip_id, day):
     return None
 
 
-def create_reservation(token, lab_id, day, slot_id, class_ids, experiment_type_id, purpose):
-    status, body = call("/reservation/create", {
+def create_reservation(token, lab_id, day, slot_id, class_ids, experiment_type_id, purpose, equipments=None):
+    payload = {
         "resourceType": 1, "labId": lab_id, "reserveDate": day, "slotId": slot_id,
         "usePeople": 20, "experimentTypeId": experiment_type_id,
         "classIds": class_ids, "courseName": "迭代5验收课程", "purpose": purpose
-    }, token=token)
+    }
+    if equipments:
+        payload["equipments"] = equipments
+    status, body = call("/reservation/create", payload, token=token)
     return status, (body.get("data") or {}).get("id")
 
 
@@ -432,6 +440,52 @@ def main():
                     f"DELETE FROM tb_reservation_class WHERE reservation_id={res_past}; "
                     f"DELETE FROM tb_reservation_equipment WHERE reservation_id={res_past}; "
                     f"DELETE FROM tb_reservation WHERE id={res_past};")
+
+    # ---------- 8.3 调整申请里增减附带设备 ----------
+    print("\n[8.3] 调整申请增减附带设备")
+    day_eq = next_weekday(11).isoformat()
+    slot_eq = find_free_lab_slot(teacher, 8, day_eq)
+    _, body = call("/laboratory/get_info", {"id": 8}, token=teacher)
+    lab_eq = body.get("data") or {}
+    _, body = call("/equipment/list_option", {"labId": 8, "onlyAvailable": False}, token=teacher)
+    lab_equipments = body.get("data") or []
+    if not slot_eq or len(lab_equipments) < 2 or lab_eq.get("experimentTypeId") is None:
+        skip("调整申请增减附带设备", "实验室 8 没有空闲时段或设备不足 2 台")
+    else:
+        eq_a, eq_b = lab_equipments[0], lab_equipments[1]
+        status, res_eq = create_reservation(teacher, 8, day_eq, slot_eq, class_ids,
+                                            lab_eq.get("experimentTypeId"), "排队验收：附带设备",
+                                            equipments=[{"equipmentId": eq_a["id"], "equipmentCount": 1}])
+        if status != 200:
+            skip("调整申请增减附带设备", f"创建预约失败：{status}")
+        else:
+            call("/reservation/audit", {"id": res_eq, "result": "APPROVED"}, token=lab_admin)
+            _, body = call("/reservation/get_info", {"id": res_eq}, token=teacher)
+            before_eq = [item["equipmentId"] for item in (body.get("data") or {}).get("equipments") or []]
+            check("预约带上了附带设备", eq_a["id"] in before_eq, str(before_eq))
+
+            day_eq2 = next_weekday(12).isoformat()
+            slot_eq2 = find_free_lab_slot(teacher, 8, day_eq2)
+            status, body = call("/reservation_change/create", {
+                "reservationId": res_eq, "changeType": 1, "reason": "换设备",
+                "newReserveDate": day_eq2, "newSlotId": slot_eq2,
+                "equipments": [{"equipmentId": eq_b["id"], "equipmentCount": 2}]
+            }, token=teacher)
+            change_eq_id = body.get("data")
+            check("发起调整（改设备清单）", status == 200, f"status={status} {body}")
+            if status == 200:
+                status, _ = call("/reservation_change/audit",
+                                 {"id": change_eq_id, "result": 1, "opinion": "同意换设备"}, token=lab_admin)
+                _, body = call("/reservation/get_info", {"id": res_eq}, token=teacher)
+                after_eq = [item["equipmentId"] for item in (body.get("data") or {}).get("equipments") or []]
+                check("审批通过后设备清单被替换",
+                      status == 200 and eq_b["id"] in after_eq and eq_a["id"] not in after_eq,
+                      f"before={before_eq} after={after_eq}")
+                check("新设备数量按申请写入",
+                      any(item["equipmentId"] == eq_b["id"] and item["equipmentCount"] == 2
+                          for item in (body.get("data") or {}).get("equipments") or []),
+                      str((body.get("data") or {}).get("equipments")))
+            call("/reservation/release", {"id": res_eq, "reason": "验收脚本清理"}, token=lab_admin)
 
     # ---------- 9. 并发 ----------
     print("\n[9] 并发判冲（20 线程抢同一实验室同一时段）")

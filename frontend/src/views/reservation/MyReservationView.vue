@@ -88,6 +88,14 @@
                          :value="slot.slotId" />
             </el-select>
           </el-form-item>
+          <el-form-item v-if="currentRow?.resourceType === 1" label="附带设备">
+            <el-select v-model="changeEquipmentIds" multiple filterable collapse-tags style="width: 100%"
+                       placeholder="可选：调整实验室顺带借用的设备">
+              <el-option v-for="item in changeEquipments" :key="item.id"
+                         :label="`${item.resourceNo} ${item.name}（库存 ${item.stock}）`" :value="item.id" />
+            </el-select>
+            <div class="text-secondary">不选表示不改变现有设备清单</div>
+          </el-form-item>
         </template>
         <el-form-item label="申请原因">
           <el-input v-model="changeForm.reason" type="textarea" :rows="3" maxlength="255" show-word-limit />
@@ -109,11 +117,16 @@ import {
   cancelReservation,
   createReservationChange,
   getMyReservationPage,
+  getReservationInfo,
   RESERVATION_STATUS_OPTIONS,
   type ReservationItem,
   type ReservationQuery
 } from '@/api/reservation'
-import { getEquipmentAvailability, getLaboratoryAvailability } from '@/api/resource'
+import {
+  getEquipmentAvailability,
+  getLaboratoryAvailability,
+  listEquipmentOptions
+} from '@/api/resource'
 import { useUserStore } from '@/stores/user'
 import ReservationDetailDialog from './components/ReservationDetailDialog.vue'
 
@@ -184,15 +197,33 @@ const changeForm = reactive<{ reservationId: number; changeType: number; reason:
   newReserveDate: null,
   newSlotId: null
 })
+const currentRow = ref<ReservationItem | null>(null)
+const changeEquipments = ref<{ id: number; resourceNo: string; name: string; stock: number }[]>([])
+const changeEquipmentIds = ref<number[]>([])
 
-function openChange(row: ReservationItem): void {
+async function openChange(row: ReservationItem): Promise<void> {
+  currentRow.value = row
   changeForm.reservationId = row.id
   changeForm.changeType = 1
   changeForm.reason = ''
   changeForm.newReserveDate = row.reserveDate
   changeForm.newSlotId = null
   changeSlots.value = []
+  changeEquipmentIds.value = []
+  changeEquipments.value = []
   changeVisible.value = true
+  // 实验室预约可以顺便调整「附带设备」；预置当前清单，未改动则提交时不传
+  if (row.resourceType === 1 && row.labId) {
+    const list = await listEquipmentOptions({ labId: row.labId, onlyAvailable: false })
+    changeEquipments.value = list.map((item) => ({
+      id: item.id,
+      resourceNo: item.resourceNo,
+      name: item.name,
+      stock: item.stock
+    }))
+    const detail = await getReservationInfo(row.id)
+    changeEquipmentIds.value = (detail.equipments ?? []).map((item) => item.equipmentId)
+  }
   void loadChangeSlots()
 }
 
@@ -235,7 +266,11 @@ async function submitChange(): Promise<void> {
       changeType: changeForm.changeType,
       reason: changeForm.reason,
       newReserveDate: changeForm.changeType === 1 ? changeForm.newReserveDate : null,
-      newSlotId: changeForm.changeType === 1 ? changeForm.newSlotId : null
+      newSlotId: changeForm.changeType === 1 ? changeForm.newSlotId : null,
+      // 只在实验室预约、勾选了设备时传；不传表示保持原清单
+      equipments: changeForm.changeType === 1 && currentRow.value?.resourceType === 1 && changeEquipmentIds.value.length > 0
+        ? changeEquipmentIds.value.map((id) => ({ equipmentId: id, equipmentCount: 1 }))
+        : null
     })
     ElMessage.success('调整申请已提交，等待管理员审批')
     changeVisible.value = false
