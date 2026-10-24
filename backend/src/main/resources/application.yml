@@ -146,10 +146,12 @@ lab-reserve:
     access-expire-seconds: ${JWT_ACCESS_EXPIRE:7200}
     refresh-expire-seconds: ${JWT_REFRESH_EXPIRE:604800}
   queue:
-    # 候补确认时限（分钟）—— 需求 Q18，演示时可临时改成 0.5
-    candidate-timeout-minutes: 30
+    # 候补确认时限（分钟）—— 需求 Q18；验收时可用 QUEUE_CANDIDATE_TIMEOUT_MINUTES=1 临时调小
+    candidate-timeout-minutes: ${QUEUE_CANDIDATE_TIMEOUT_MINUTES:30}
     # 候补放弃 / 超时后的排队禁入天数 —— 需求 Q17
-    ban-days: 7
+    ban-days: ${QUEUE_BAN_DAYS:7}
+    # 超时扫描间隔（毫秒），验收时可调成 3000 快速看到超时效果
+    scan-interval-ms: ${QUEUE_SCAN_INTERVAL_MS:30000}
   reservation:
     # 发起调整申请需提前的小时数 —— 需求 Q13
     change-ahead-hours: 24

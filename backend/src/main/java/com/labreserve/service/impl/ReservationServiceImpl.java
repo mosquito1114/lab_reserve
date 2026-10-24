@@ -43,6 +43,7 @@ import com.labreserve.model.vo.ReservationVO;
 import com.labreserve.model.vo.TimetableVO;
 import com.labreserve.security.PermissionService;
 import com.labreserve.service.MessageService;
+import com.labreserve.service.QueueCandidateService;
 import com.labreserve.service.ReservationService;
 import com.labreserve.util.AfterCommitUtils;
 import com.labreserve.util.RedisLockTemplate;
@@ -56,7 +57,6 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
-import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -82,9 +82,6 @@ public class ReservationServiceImpl implements ReservationService {
 
     private static final DateTimeFormatter YYYYMMDD = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter HH_MM = DateTimeFormatter.ofPattern("HH:mm");
-
-    /** 预约号自增 key 的 TTL */
-    private static final Duration RESERVE_NO_TTL = Duration.ofHours(48);
 
     @Autowired
     private ReservationMapper reservationMapper;
@@ -142,6 +139,12 @@ public class ReservationServiceImpl implements ReservationService {
 
     @Autowired
     private PermissionService permissionService;
+
+    @Autowired
+    private QueueCandidateService queueCandidateService;
+
+    @Autowired
+    private com.labreserve.util.ReserveNoUtils reserveNoUtils;
 
     // ============================================================
     // 预检 / 提交
@@ -422,6 +425,7 @@ public class ReservationServiceImpl implements ReservationService {
         update.setStatus("CANCELED");
         update.setRejectReason(dto.getReason());
         reservationMapper.updateById(update);
+        triggerCandidateAfterRelease(reservation);
         log.info("[预约] 撤销 id={}, reason={}", reservation.getId(), dto.getReason());
     }
 
@@ -442,7 +446,7 @@ public class ReservationServiceImpl implements ReservationService {
             update.setRejectReason(StringUtils.hasText(dto.getReason()) ? dto.getReason() : "管理员释放时段");
             reservationMapper.updateById(update);
         });
-        // 迭代 6 会在这里触发候补顺延；本轮只置 CANCELED + 通知申请人
+        triggerCandidateAfterRelease(reservation);
         afterCommitUtils.run(() -> messageService.send(reservation.getApplicantId(),
                 MessageType.RESERVATION_AUDIT, "预约已被释放",
                 "你的预约 " + reservation.getReserveNo() + " 已被管理员释放："
@@ -484,6 +488,15 @@ public class ReservationServiceImpl implements ReservationService {
                 excludeReservationId);
     }
 
+    /** 时段被释放后触发候补顺延（事务提交后执行，避免读到未提交的取消状态） */
+    private void triggerCandidateAfterRelease(Reservation reservation) {
+        afterCommitUtils.run(() -> queueCandidateService.triggerCandidate(
+                reservation.getResourceType(),
+                Integer.valueOf(1).equals(reservation.getResourceType())
+                        ? reservation.getLabId() : reservation.getEquipmentId(),
+                reservation.getReserveDate(), reservation.getSlotId()));
+    }
+
     private String lockKey(Integer resourceType, Long resourceId, LocalDate date, Long slotId) {
         return RedisKeyConst.lockReserveKey(resourceType, resourceId, date, slotId);
     }
@@ -498,9 +511,8 @@ public class ReservationServiceImpl implements ReservationService {
     }
 
     private String nextReserveNo(LocalDate date) {
-        String key = RedisKeyConst.reservationSeqKey(date);
-        long seq = redisUtils.incrementWithTtl(key, RESERVE_NO_TTL);
-        return "R-" + YYYYMMDD.format(date) + "-" + String.format("%04d", seq);
+        // 与「候补确认转正」共用同一套编号规则
+        return reserveNoUtils.next(date);
     }
 
     private String describe(Reservation reservation) {
@@ -539,6 +551,7 @@ public class ReservationServiceImpl implements ReservationService {
 
         ReservationDetailVO vo = new ReservationDetailVO();
         fillVO(vo, reservation, labs, equipments, slots, types, users, colleges);
+        vo.setFromQueue(reservation.getFromQueue());
 
         // 附带设备
         List<ReservationEquipment> attached = reservationEquipmentMapper.selectList(

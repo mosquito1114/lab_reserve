@@ -93,6 +93,24 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '调整审批', icon: 'RefreshRight', permission: 'change:audit' }
       },
       {
+        path: 'queue/my',
+        name: 'QueueMy',
+        component: () => import('@/views/queue/MyQueueView.vue'),
+        meta: { title: '我的排队', icon: 'Timer', permission: 'queue:create' }
+      },
+      {
+        path: 'queue/manage',
+        name: 'QueueManage',
+        component: () => import('@/views/queue/QueueManageView.vue'),
+        meta: { title: '排队管理', icon: 'Sort', permission: 'queue:list-all' }
+      },
+      {
+        path: 'queue/ban',
+        name: 'QueueBan',
+        component: () => import('@/views/queue/QueueBanView.vue'),
+        meta: { title: '我的禁入记录', icon: 'Warning', permission: 'queue:create' }
+      },
+      {
         path: 'resource/laboratory',
         name: 'ResourceLaboratory',
         component: () => import('@/views/resource/LaboratoryView.vue'),
@@ -149,7 +167,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '知识库管理', icon: 'Files', permission: 'rag:doc:list' }
       }
       // ↓↓↓ 后续迭代在此按模块追加子路由 ↓↓↓
-      // 排队候补：/queue/my  /queue/ban
       // 设备运维：/repair/apply  /repair/my  /repair/order  /repair/task
       // 数据统计：/statistics
       // 系统管理：/system/user  /system/role  /system/operation-log

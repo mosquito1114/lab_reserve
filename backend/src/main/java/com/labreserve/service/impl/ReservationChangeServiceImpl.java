@@ -25,6 +25,7 @@ import com.labreserve.model.entity.TimeSlot;
 import com.labreserve.model.entity.User;
 import com.labreserve.model.vo.ReservationChangeVO;
 import com.labreserve.service.MessageService;
+import com.labreserve.service.QueueCandidateService;
 import com.labreserve.service.ReservationChangeService;
 import com.labreserve.util.AfterCommitUtils;
 import com.labreserve.util.JsonUtils;
@@ -93,6 +94,9 @@ public class ReservationChangeServiceImpl implements ReservationChangeService {
 
     @Autowired
     private AfterCommitUtils afterCommitUtils;
+
+    @Autowired
+    private QueueCandidateService queueCandidateService;
 
     // ============================================================
     // 发起
@@ -298,6 +302,12 @@ public class ReservationChangeServiceImpl implements ReservationChangeService {
         messageApplicant(reservation, "调整申请已通过",
                 "你的预约 " + reservation.getReserveNo() + " 的调整申请已通过："
                         + (isCancel ? "预约已取消" : summaryOf(change)));
+        // 原时段被释放（取消 / 换时间都一样）→ 触发候补顺延
+        Long oldResourceId = Integer.valueOf(1).equals(reservation.getResourceType())
+                ? reservation.getLabId() : reservation.getEquipmentId();
+        afterCommitUtils.run(() -> queueCandidateService.triggerCandidate(
+                reservation.getResourceType(), oldResourceId,
+                reservation.getReserveDate(), reservation.getSlotId()));
         log.info("[调整申请] 通过 id={}, reservationId={}", change.getId(), reservation.getId());
     }
 

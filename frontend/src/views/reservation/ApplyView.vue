@@ -53,7 +53,7 @@
           <div class="slot-queue">
             <span class="text-secondary">排队 {{ slot.queueCount }} 人</span>
             <el-button v-if="slot.available" type="primary" size="small" @click="openSubmit(slot)">预约</el-button>
-            <el-button v-else type="warning" size="small" plain @click="showQueueHint(slot)">排队</el-button>
+            <el-button v-else type="warning" size="small" plain @click="openQueue(slot)">排队</el-button>
           </div>
         </div>
       </div>
@@ -106,9 +106,7 @@
       <el-result :icon="resultSuccess ? 'success' : 'warning'" :title="resultTitle" :sub-title="resultMessage">
         <template #extra>
           <el-button v-if="resultSuccess" type="primary" @click="goMyReservations">查看我的预约</el-button>
-          <el-button v-else-if="queueHintVisible" type="warning" plain @click="resultVisible = false">
-            加入排队（迭代 6 开放）
-          </el-button>
+          <el-button v-else-if="queueHintVisible" type="warning" plain @click="joinQueue">加入排队</el-button>
           <el-button v-else @click="resultVisible = false">知道了</el-button>
         </template>
       </el-result>
@@ -119,7 +117,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import {
   getEquipmentAvailability,
@@ -136,6 +134,7 @@ import {
 } from '@/api/resource'
 import { getClassList, type ClassItem } from '@/api/class'
 import { checkReservation, createReservation, type ReservationSubmitPayload } from '@/api/reservation'
+import { createQueue } from '@/api/queue'
 import { useUserStore } from '@/stores/user'
 
 interface SlotView {
@@ -313,8 +312,45 @@ async function handleSubmit(): Promise<void> {
   }
 }
 
-function showQueueHint(slot: SlotView): void {
-  ElMessage.info(`该时段${slot.reason ? '：' + slot.reason : '已被占用'}；排队功能将在迭代 6 开放`)
+/** 时段已满 → 加入排队（ZADD NX 幂等，重复点只会得到"你已在队列中"） */
+async function openQueue(slot: SlotView): Promise<void> {
+  currentSlot.value = slot
+  queueCountHint.value = slot.queueCount ?? 0
+  const tip = slot.reason ? `原因：${slot.reason}` : '该时段已被预约'
+  await ElMessageBox.confirm(
+    `${tip}；当前已有 ${queueCountHint.value} 人排队。\n排队后如果时段空出，系统会通知你限时确认（超时未确认会进入 7 天禁入）。`,
+    '加入排队',
+    { type: 'warning', confirmButtonText: '加入排队', cancelButtonText: '取消' }
+  ).catch(() => 'cancel')
+    .then(async (action) => {
+      if (action === 'cancel') {
+        return
+      }
+      if (!resourceId.value) {
+        return
+      }
+      try {
+        const created = await createQueue({
+          resourceType: resourceType.value === 'lab' ? 1 : 2,
+          labId: resourceType.value === 'lab' ? resourceId.value : null,
+          equipmentId: resourceType.value === 'equip' ? resourceId.value : null,
+          reserveDate: date.value,
+          slotId: slot.slotId
+        })
+        ElMessage.success(`已加入排队：${created.queueNo}，当前第 ${created.position} 位`)
+        void router.push('/queue/my')
+      } catch (error) {
+        ElMessage.warning((error as Error).message)
+      }
+    })
+}
+
+/** 冲突弹窗里的"加入排队" */
+function joinQueue(): void {
+  resultVisible.value = false
+  if (currentSlot.value) {
+    void openQueue(currentSlot.value)
+  }
 }
 
 // ---------- 结果弹窗 ----------
@@ -323,6 +359,7 @@ const resultSuccess = ref(false)
 const resultTitle = ref('')
 const resultMessage = ref('')
 const queueHintVisible = ref(false)
+const queueCountHint = ref(0)
 
 function goMyReservations(): void {
   resultVisible.value = false
