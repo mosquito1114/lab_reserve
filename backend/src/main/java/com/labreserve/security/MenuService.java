@@ -37,7 +37,7 @@ public class MenuService {
             new MenuDef("/profile", "个人中心", "User", null)
     );
 
-    /** 需要权限的分组菜单（迭代 2 系统管理 → 4 资源管理 → 3 消息通知 → 5 预约管理 → 6 排队候补 → 7 设备运维 → R5 智能问答） */
+    /** 需要权限的分组菜单（迭代 2 系统管理 → 4 资源管理 → 3 消息通知 → 5 预约管理 → 6 排队候补 → 7 设备运维 → 8 数据统计 → R5 智能问答） */
     private static final List<GroupDef> GROUPS = List.of(
             new GroupDef("/system", "系统管理", "Setting", List.of(
                     new MenuDef("/system/user", "用户管理", "UserFilled", PermissionConst.USER_LIST),
@@ -58,6 +58,9 @@ public class MenuService {
                     new MenuDef("/reservation/timetable", "我的实验课表", "Notebook", PermissionConst.RESERVATION_TIMETABLE),
                     new MenuDef("/reservation/audit", "预约审核", "Checked", PermissionConst.RESERVATION_AUDIT),
                     new MenuDef("/reservation/change-audit", "调整审批", "RefreshRight", PermissionConst.CHANGE_AUDIT)
+            )),
+            new GroupDef("/statistics", "数据统计", "DataLine", List.of(
+                    new MenuDef("/statistics", "统计报表", "DataLine", PermissionConst.STAT_VIEW)
             )),
             new GroupDef("/repair", "设备运维", "Tools", List.of(
                     new MenuDef("/repair/apply", "我要报修", "Tools", PermissionConst.REPAIR_CREATE),

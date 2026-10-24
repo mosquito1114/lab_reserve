@@ -93,6 +93,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '调整审批', icon: 'RefreshRight', permission: 'change:audit' }
       },
       {
+        path: 'statistics',
+        name: 'Statistics',
+        component: () => import('@/views/statistics/StatisticsView.vue'),
+        meta: { title: '数据统计', icon: 'DataLine', permission: 'stat:view' }
+      },
+      {
         path: 'repair/apply',
         name: 'RepairApply',
         component: () => import('@/views/repair/ApplyView.vue'),
@@ -191,7 +197,6 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: '知识库管理', icon: 'Files', permission: 'rag:doc:list' }
       }
       // ↓↓↓ 后续迭代在此按模块追加子路由 ↓↓↓
-      // 数据统计：/statistics
       // 系统管理：/system/user  /system/role  /system/operation-log
     ]
   },

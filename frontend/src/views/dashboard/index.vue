@@ -9,6 +9,16 @@
       show-icon
     />
 
+    <!-- ---------- 业务概览：有 stat:view 的角色可见（SYS_ADMIN / LAB_ADMIN） ---------- -->
+    <el-row v-if="canStat" :gutter="16" class="mb-16">
+      <el-col :xs="12" :sm="8" :md="4" v-for="card in overviewCards" :key="card.label">
+        <el-card shadow="never" class="overview-card" v-loading="overviewLoading">
+          <div class="overview-label">{{ card.label }}</div>
+          <div class="overview-value">{{ card.value }}</div>
+        </el-card>
+      </el-col>
+    </el-row>
+
     <el-row :gutter="16">
       <!-- ---------- 系统运行状态：只有系统管理员可见 ---------- -->
       <el-col v-if="canMonitor" :xs="24" :md="16">
@@ -124,6 +134,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
 import { getMonitor, type SystemMonitor } from '@/api/system'
+import { getOverview, type StatisticsOverview } from '@/api/statistics'
 import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
@@ -131,6 +142,32 @@ const userStore = useUserStore()
 
 /** 运行状态属于运维信息，只有具备该权限的角色（默认系统管理员）才展示 */
 const canMonitor = computed(() => userStore.hasPermission('system:monitor:view'))
+const canStat = computed(() => userStore.hasPermission('stat:view'))
+
+const overview = ref<StatisticsOverview | null>(null)
+const overviewLoading = ref(false)
+const overviewCards = computed(() => [
+  { label: '预约总数', value: overview.value?.reservationTotal ?? 0 },
+  { label: '待审核', value: overview.value?.pendingAudit ?? 0 },
+  { label: '今日预约', value: overview.value?.todayReservation ?? 0 },
+  { label: '排队中', value: overview.value?.queueTotal ?? 0 },
+  { label: '待处理工单', value: overview.value?.repairPending ?? 0 },
+  { label: '资源数（实验室/设备）', value: `${overview.value?.labTotal ?? 0}/${overview.value?.equipmentTotal ?? 0}` }
+])
+
+async function loadOverview(): Promise<void> {
+  if (!canStat.value) {
+    return
+  }
+  overviewLoading.value = true
+  try {
+    overview.value = await getOverview()
+  } catch {
+    // 首页非关键路径，失败静默
+  } finally {
+    overviewLoading.value = false
+  }
+}
 
 const loading = ref(false)
 const monitor = ref<SystemMonitor | null>(null)
@@ -181,7 +218,10 @@ async function loadMonitor(): Promise<void> {
   }
 }
 
-onMounted(loadMonitor)
+onMounted(() => {
+  void loadMonitor()
+  void loadOverview()
+})
 </script>
 
 <style scoped lang="scss">
@@ -219,5 +259,20 @@ onMounted(loadMonitor)
 
 .mt-16 {
   margin-top: 16px;
+}
+.overview-card {
+  text-align: center;
+}
+
+.overview-label {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+}
+
+.overview-value {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--el-color-primary);
 }
 </style>
