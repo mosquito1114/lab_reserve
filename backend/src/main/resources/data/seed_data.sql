@@ -17,7 +17,7 @@
 --   因此下面用混合进制的方式生成 (lab, date, slot) 组合，保证两两不重复：
 --     lab  = (x MOD 12) + 1
 --     slot = ((x DIV 12) MOD 5) + 1
---     date = 2025-09-01 + (x DIV 60) 天
+--     date = CURDATE() - 2 天 + (x DIV 60) 天（以今天为基准，保证演示时能看到“本周”的预约）
 --   x 取 0..239 时这三元组恰好一一对应，不会撞唯一索引。
 -- ============================================================================
 
@@ -369,7 +369,9 @@ SELECT
 FROM labs CROSS JOIN kinds;
 
 -- ============================================================================
--- 9. 历史预约（240 条实验室 + 120 条设备），用于统计模块演示
+-- 9. 演示预约（240 条实验室 + 120 条设备）：日期以 CURDATE() 为基准，
+--    实验室覆盖 今天-2 ~ 今天+1、设备覆盖 今天-1 ~ 今天+1，
+--    每天固定有 6 条 PENDING（供审核演示）与 48 条 APPROVED（供学生课表演示）
 -- ============================================================================
 
 INSERT INTO tb_reservation (
@@ -381,14 +383,14 @@ INSERT INTO tb_reservation (
     created_at, updated_at)
 WITH RECURSIVE x(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM x WHERE n < 239)
 SELECT
-  CONCAT('R-', DATE_FORMAT(DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY), '%Y%m%d'),
+  CONCAT('R-', DATE_FORMAT(DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 2 DAY), INTERVAL (x.n DIV 60) DAY), '%Y%m%d'),
          '-', LPAD(x.n + 1, 4, '0')),
   t.user_id,
   1,
   (x.n MOD 12) + 1,
   NULL,
   1,
-  DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY),
+  DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 2 DAY), INTERVAL (x.n DIV 60) DAY),
   ((x.n DIV 12) MOD 5) + 1,
   -- 使用人数 = 上课班级人数，且不超过实验室容量
   LEAST(c.student_count, l.capacity),
@@ -404,12 +406,12 @@ SELECT
   END,
   IF(x.n MOD 20 IN (2, 3), NULL, 2),
   IF(x.n MOD 20 IN (2, 3), NULL,
-     DATE_ADD(DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY), INTERVAL -1 DAY)),
+     DATE_ADD(DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 2 DAY), INTERVAL (x.n DIV 60) DAY), INTERVAL -1 DAY)),
   IF(x.n MOD 20 = 0, '该时段实验室已安排其他课程', NULL),
   0,
   NULL,
-  DATE_ADD(DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY), INTERVAL -(3 + (x.n MOD 3)) DAY),
-  DATE_ADD(DATE_ADD('2025-09-01', INTERVAL (x.n DIV 60) DAY), INTERVAL -(3 + (x.n MOD 3)) DAY)
+  DATE_ADD(DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 2 DAY), INTERVAL (x.n DIV 60) DAY), INTERVAL -(3 + (x.n MOD 3)) DAY),
+  DATE_ADD(DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 2 DAY), INTERVAL (x.n DIV 60) DAY), INTERVAL -(3 + (x.n MOD 3)) DAY)
 FROM x
 JOIN tb_laboratory l ON l.id = (x.n MOD 12) + 1
 -- 上课班级由 lab_id 反查，与下面 tb_reservation_class 的写入逻辑保持一致
@@ -434,14 +436,14 @@ INSERT INTO tb_reservation (
     created_at, updated_at)
 WITH RECURSIVE y(n) AS (SELECT 0 UNION ALL SELECT n + 1 FROM y WHERE n < 119)
 SELECT
-  CONCAT('R-D', DATE_FORMAT(DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY), '%Y%m%d'),
+  CONCAT('R-D', DATE_FORMAT(DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 1 DAY), INTERVAL (y.n DIV 40) DAY), '%Y%m%d'),
          '-', LPAD(y.n + 1, 4, '0')),
   u.id,
   2,
   NULL,
   (y.n MOD 84) + 1,
   1 + (y.n MOD 3),
-  DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY),
+  DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 1 DAY), INTERVAL (y.n DIV 40) DAY),
   ((y.n DIV 8) MOD 5) + 1,
   1 + (y.n MOD 20),
   (y.n MOD 5) + 1,
@@ -453,12 +455,12 @@ SELECT
     ELSE 'APPROVED'
   END,
   2,
-  DATE_ADD(DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY), INTERVAL -1 DAY),
+  DATE_ADD(DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 1 DAY), INTERVAL (y.n DIV 40) DAY), INTERVAL -1 DAY),
   IF(y.n MOD 25 = 0, '该设备库存不足，请减少数量', NULL),
   0,
   NULL,
-  DATE_ADD(DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY), INTERVAL -(2 + (y.n MOD 3)) DAY),
-  DATE_ADD(DATE_ADD('2025-10-01', INTERVAL (y.n DIV 40) DAY), INTERVAL -(2 + (y.n MOD 3)) DAY)
+  DATE_ADD(DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 1 DAY), INTERVAL (y.n DIV 40) DAY), INTERVAL -(2 + (y.n MOD 3)) DAY),
+  DATE_ADD(DATE_ADD(DATE_SUB(CURDATE(), INTERVAL 1 DAY), INTERVAL (y.n DIV 40) DAY), INTERVAL -(2 + (y.n MOD 3)) DAY)
 FROM y
 JOIN tb_user u ON u.id = 5 + (y.n MOD 12);
 
@@ -496,17 +498,17 @@ WHERE r.id <= 120;
 INSERT INTO tb_resource_queue (queue_no, resource_type, lab_id, equipment_id,
                                reserve_date, slot_id, applicant_id, status, join_time, created_at, updated_at)
 VALUES
-('P-LAB-01-20251010-001', 1, 1,  NULL, '2025-10-10', 2, 5,  'QUEUING',  '2025-10-08 09:10:00', '2025-10-08 09:10:00', '2025-10-08 09:10:00'),
-('P-LAB-01-20251010-002', 1, 1,  NULL, '2025-10-10', 2, 6,  'QUEUING',  '2025-10-08 09:25:00', '2025-10-08 09:25:00', '2025-10-08 09:25:00'),
-('P-LAB-01-20251010-003', 1, 1,  NULL, '2025-10-10', 2, 7,  'QUEUING',  '2025-10-08 10:02:00', '2025-10-08 10:02:00', '2025-10-08 10:02:00'),
-('P-LAB-03-20251011-001', 1, 3,  NULL, '2025-10-11', 3, 9,  'NOTIFIED', '2025-10-08 14:00:00', '2025-10-08 14:00:00', '2025-10-09 09:00:00'),
+('P-LAB-01-QUEUE-001', 1, 1,  NULL, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 2, 5,  'QUEUING',  DATE_ADD(NOW(), INTERVAL -2 HOUR), DATE_ADD(NOW(), INTERVAL -2 HOUR), DATE_ADD(NOW(), INTERVAL -2 HOUR)),
+('P-LAB-01-QUEUE-002', 1, 1,  NULL, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 2, 6,  'QUEUING',  DATE_ADD(NOW(), INTERVAL -90 MINUTE), DATE_ADD(NOW(), INTERVAL -90 MINUTE), DATE_ADD(NOW(), INTERVAL -90 MINUTE)),
+('P-LAB-01-QUEUE-003', 1, 1,  NULL, DATE_ADD(CURDATE(), INTERVAL 1 DAY), 2, 7,  'QUEUING',  DATE_ADD(NOW(), INTERVAL -60 MINUTE), DATE_ADD(NOW(), INTERVAL -60 MINUTE), DATE_ADD(NOW(), INTERVAL -60 MINUTE)),
+('P-LAB-03-QUEUE-001', 1, 3,  NULL, DATE_ADD(CURDATE(), INTERVAL 2 DAY), 3, 9,  'NOTIFIED', DATE_ADD(NOW(), INTERVAL -180 MINUTE), DATE_ADD(NOW(), INTERVAL -180 MINUTE), DATE_ADD(NOW(), INTERVAL -30 MINUTE)),
 ('P-LAB-05-20251012-001', 1, 5,  NULL, '2025-10-12', 1, 10, 'QUEUING',  '2025-10-09 08:30:00', '2025-10-09 08:30:00', '2025-10-09 08:30:00'),
 ('P-ZY-01-001-20251012-001', 2, NULL, 1, '2025-10-12', 4, 11, 'QUEUING', '2025-10-09 11:00:00', '2025-10-09 11:00:00', '2025-10-09 11:00:00');
 
 INSERT INTO tb_candidate_notice_log (queue_id, notice_time, deadline, channel, action, action_time, seq, created_at)
-SELECT q.id, '2025-10-09 09:00:00', '2025-10-09 09:30:00', 1, 0, NULL, 1, '2025-10-09 09:00:00'
+SELECT q.id, DATE_ADD(NOW(), INTERVAL -30 MINUTE), '2025-10-09 09:30:00', 1, 0, NULL, 1, DATE_ADD(NOW(), INTERVAL -30 MINUTE)
 FROM tb_resource_queue q
-WHERE q.queue_no = 'P-LAB-03-20251011-001';
+WHERE q.queue_no = 'P-LAB-03-QUEUE-001';
 
 -- ============================================================================
 -- 12. 演示报修工单
