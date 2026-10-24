@@ -166,7 +166,7 @@ cd frontend && npm run build && npm run type-check
 | 3 | 消息通知（站内信 + Redis Stream 邮件投递 + 重试/死信） | ✅ 已完成，提交在 `dev`（未合 master；QQ 真发待授权码，本地调试 SMTP 已验通） |
 | 4 | 资源管理（实验室 / 设备 / 字典 / 可用时段 / 变更留痕） | ✅ 已完成，提交在 `dev`（未合 master） |
 | 5 | 预约管理（预检 / 提交 / 审核 / 调整申请 + 并发判冲） | ✅ 已完成，提交在 `dev`（未合 master） |
-| 6 | 排队与候补（Redis ZSet + 超时顺延 + 7 天禁入） | ⬜ 未开始 |
+| 6 | 排队与候补（Redis ZSet + 超时顺延 + 7 天禁入） | ✅ 已完成，提交在 `dev`（未合 master） |
 | 7 | 设备运维（报修 → 派单 → 维修 → 验收 + OSS 传图） | ⬜ 未开始（需 OSS 凭据） |
 | 8 | 统计报表 + Excel 导出 + 交付文档 | ⬜ 未开始 |
 | R0 | RAG 模块骨架（另一批提交，`RAG_ENABLED=false`） | 🟡 骨架在 `dev`，未合 master |
@@ -184,9 +184,10 @@ cd frontend && npm run build && npm run type-check
 | 资源 | 字典 `/api/experiment_type/*`、`/api/time_slot/*`（各 4 个）；`/api/laboratory/get_page` `get_info` `create` `update` `update_status` `list_option` `get_availability`；`/api/equipment/*`（同名 7 个）；`/api/resource_log/get_page` |
 | 预约 | `/api/reservation/check` `create` `get_page` `get_my_page` `get_pending_page` `get_info` `audit` `cancel` `release` `get_my_timetable` |
 | 调整申请 | `/api/reservation_change/create` `get_list_by_reservation` `get_page` `audit` `cancel` |
+| 排队 | `/api/queue/create` `get_my_page` `get_page` `get_info` `get_my_position` `cancel` `confirm` `abandon` `get_notice_list`、`/api/queue_ban/get_my_list` |
 | 消息 | `/api/message/get_page` `get_info` `get_unread_count` `read` `read_all` `delete` `clear` `get_delivery_log_page` `send_test_email` `send`（`message:send`，仅 SYS_ADMIN） |
 
-**尚未实现**：`/api/queue*`（迭代 6）、`/api/repair*` 与 `/api/file/upload`（迭代 7，需 OSS）、`/api/statistics*`（迭代 8）。
+**尚未实现**：`/api/repair*` 与 `/api/file/upload`（迭代 7，需 OSS）、`/api/statistics*`（迭代 8）。
 
 ### 7.3 与最初需求不同的地方（必须知道）
 
@@ -200,7 +201,10 @@ cd frontend && npm run build && npm run type-check
    （`occupy_key` 生成列唯一索引，占用集合 `{PENDING, APPROVED, CHANGE_PENDING}`）；锁内判冲后插入，仍撞索引则转 409。
 7. **调整申请「通过前不改业务字段」**：只把 `status` 置 `CHANGE_PENDING`，变更内容存 `before_json`/`after_json`，
    审批通过时在锁内校验新时段 → 回写 → 释放旧时段；窗口为「距开始 ≥ 24h」。
-8. **消息只走「统一入口 + Redis Stream」**：业务代码一律调 `MessageService.send(...)`，禁止直接写 `tb_message` 或手动 `XADD`；
+8. **候补顺延有唯一入口**：`release` / 预约取消 / 调整审批通过 / 队首超时放弃，都调
+   `QueueCandidateService#triggerCandidate`（锁内取队首 → CAS NOTIFIED → 写通知记录 + deadline ZSet → 发消息）；
+   确认后**直接生成 APPROVED 预约单**（`from_queue=1`），超时/放弃写 7 天禁入（`tb_queue_ban_record`）。
+9. **消息只走「统一入口 + Redis Stream」**：业务代码一律调 `MessageService.send(...)`，禁止直接写 `tb_message` 或手动 `XADD`；
    邮件状态机 `NULL 未入队 → SENDING 投递中 → OK / DEAD`，`max-retry`（默认 3）是**总投递次数上限**，超过即进 `stream:msg:email:dead`。
 
 ### 7.4 权限与数据现状
@@ -226,6 +230,8 @@ cd frontend && npm run build && npm run type-check
 - 验收脚本：`scripts/acceptance/iter1_auth.py`（62 项）、`iter2_user.py`（48 项）、`iter3_message.py`（59 项）、
   `iter4_resource.py`（62 项）、`iter5_reservation.py`（47 项）；先 `./dev.sh start`，再 `python3 scripts/acceptance/iterX.py`。
 - 并发压测：`python3 scripts/stress/reservation_concurrency.py`（默认 50 并发，验收要求「恰好 1 条成功、其余 409」）。
+- 候补超时演示：用 `QUEUE_CANDIDATE_TIMEOUT_MINUTES=1 QUEUE_SCAN_INTERVAL_MS=3000 ./dev.sh restart` 重启后跑
+  `python3 scripts/acceptance/iter6_queue.py`（37 项全跑，含超时 → 禁入 → 顺延）；默认 30 分钟配置下该组 SKIP。
 - 邮件联调：`python3 scripts/tools/dev_smtp.py --port 1025`（本地调试 SMTP，邮件落盘 `/tmp/dev_smtp/*.eml`），后端需 `MAIL_HOST=127.0.0.1 MAIL_PORT=1025 MAIL_SMTP_AUTH=false MAIL_SMTP_SSL=false`；QQ 真发只需改 `.env` 的 `MAIL_USERNAME`/`MAIL_PASSWORD`（授权码）后重启。
 - 需求/设计/接口/计划：`agents/req.md`、`agents/design.md`、`agents/api.md`、`agents/plan.md`（**本机协作稿，不进 Git**，各自带「变更记录 / 自测报告」）。
 - 协作者速查：`instructs/数据库表说明.md`；交付文档在 `docs/`（迭代 8 补齐），RAG 模块另有 `docs/rag-design.md`。

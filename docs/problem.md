@@ -8,7 +8,7 @@
 > - 必须写「证据」：文件路径 / 迁移版本 / 命令 / 验收脚本断言，避免变成主观感想。
 > - 迭代完成并在 `dev` 提交后更新本文件；文末的「待补迭代」按顺序替换成正式条目。
 >
-> **最后更新**：2026-10-24（迭代 5 完成）
+> **最后更新**：2026-10-24（迭代 6 完成）
 
 ---
 
@@ -22,7 +22,8 @@
 | 3 | 消息通知 + Redis Stream 邮件 | ① 邮件重试语义（PEL / delivery-count）② 收件箱「Redis 索引 + DB 正文」一致性 |
 | 4 | 资源管理 + 变更留痕 | ① 多条件短路式的「可用性」判定 ② 变更快照该存什么 |
 | 5 | 预约管理 + 并发判冲 | ① 双保险并发（锁 + 生成列唯一索引）② 「调整审批前不改字段」的落地 |
-| 6–8 | 排队 / 运维 / 统计 | 待补（模板见文末） |
+| 6 | 排队与候补 | ① 顺位不落库（ZSet 唯一真相 + DB 兜底） ② afterCommit 里再注册 afterCommit 的静默丢失 |
+| 7–8 | 运维 / 统计 | 待补（模板见文末） |
 
 ---
 
@@ -327,6 +328,83 @@ Redis 锁 lock:reserve:{type}:{resId}:{date}:{slotId}（等待 3s / 租约 10s�
 - 站内信要在**事务提交后**发（`AfterCommitUtils` 注册 afterCommit 回调），否则 Redis Stream 消费者可能读不到刚落库的消息，邮件丢失。
 - 种子预约原来写死在 2025-09，演示时全是"已过期"、审核/课表页面空白 → `V11` 迁移整体平移到今天附近（保持相对关系，唯一索引不受影响），
   同时把 `seed_data.sql` 改成以 `CURDATE()` 为基准，保证全新库也是"本周"的预约。
+
+---
+
+## 迭代 6：排队与候补
+
+### 难题 1｜「第 N 位」到底存哪：DB 落库会漂移，只信 ZSet 又怕丢
+
+**现象**：初版把顺位 `position` 写进 `tb_resource_queue.position`，结果一到并发就错：
+两个人同时入队拿到同一个 position；有人取消后后面所有人的 position 都得扫表更新（写放大）；
+超时任务把队首踢掉后，DB 与 Redis 的队列顺序开始不一致，用户刷新前后看到不同数字。
+
+**根因**：顺位不是「数据」，是「顺序的投影」。它随时会因为入队/取消/顺延而整体变化，
+把它物化成列就等于给同一个事实存了两份，必然漂移。
+
+**解法：队列顺序只信 Redis ZSet，DB 只存业务字段**
+
+```
+Redis ZSet  lab:reserve:queue:{type}:{resId}:{date}:{slotId}
+            member = userId, score = 入队时间戳（毫秒）
+顺位        = ZRANK(member) + 1     ← 每次读都实时算，不落库
+入队幂等    = ZADD NX + DB uk_queue_user_slot 双保险
+出队        = ZREM（取消 / 确认 / 超时 / 放弃）
+```
+
+- 状态机（QUEUING / NOTIFIED / CONFIRMED / ABANDONED / TIMEOUT / CANCELED）落在 DB，
+  **状态流转一律 CAS**（`UPDATE ... WHERE status = 旧值`），受影响行数为 0 就说明被并发改过，跳过或报 409；
+- 队首可能是脏数据（DB 没有对应记录 / 状态已终态），顺延时先清 ZSet 成员再看下一位，最多试 50 次防死循环；
+- 顺延前先校验「时段确实空闲」，避免「有人取消了但时段又被别人抢」时误通知。
+
+**证据**
+- `service/impl/QueueServiceImpl.java`（`create` 的 `zAddIfAbsent` + `positionOf` 实时算；`toVOList` 每条都取 `zRank`）
+- `service/impl/QueueCandidateServiceImpl.java`（`triggerCandidate` 的「锁内取队首 → CAS → 通知」）
+- 验收：`iter6_queue.py` 断言 B=1 / C=2、"连续入队 10 次库中仍 1 条"、"ZSet 顺序与 DB 入队顺序一致"
+
+**教训**：**顺序类信息（顺位、队列、排行榜）用有序集合表达，别物化成列**；
+DB 只存"状态"和"业务字段"，两者用同一个 key 约定好，才不会出现"两个真相"。
+
+### 难题 2｜在 afterCommit 里再发消息，消息会静默消失
+
+**现象**：候补通知的站内信死活发不出来。日志里明明有「[候补] 已通知 queueId=9, userId=14」，
+但 `tb_message` 里没有这条记录，也没有任何报错——像是被吞了。
+
+**根因**：链路是「`release()`（事务）→ afterCommit 回调 → `triggerCandidate()` → 再调
+`afterCommitUtils.run(发消息)`」。Spring 在 afterCommit 阶段**同步器仍然处于激活状态**
+（要等 afterCompletion 才清理），所以第二次 `run()` 走的是"注册回调"分支；
+而此时事务生命周期已结束，**新注册的回调永远不会被触发** → 动作直接丢失，连异常都没有。
+
+**解法：显式标记「当前线程正在执行 afterCommit」，嵌套调用立即执行**
+
+```java
+private static final ThreadLocal<Integer> IN_AFTER_COMMIT = ThreadLocal.withInitial(() -> 0);
+
+public void run(Runnable action) {
+    if (!TransactionSynchronizationManager.isSynchronizationActive() || IN_AFTER_COMMIT.get() > 0) {
+        action.run();          // 已在 afterCommit 中 → 直接执行
+        return;
+    }
+    // 注册 afterCommit，并在回调内部把计数器 +1 / 恢复
+}
+```
+
+同时把异常从"静默"变成"打日志"（`log.error("[afterCommit] 回调执行失败")`），
+否则这类问题只能靠数库里的消息条数发现。
+
+**证据**
+- `util/AfterCommitUtils.java`（ThreadLocal 计数 + 异常日志）
+- 修复前后对比：同一条 `release` 流程，修复后 `tb_message` 多出一条 `CANDIDATE_NOTICE`
+- 验收：`iter6_queue.py` 的"B 收到候补通知站内信"断言
+
+**教训**：**事务同步器不是可重入的**。任何"提交后再做 X"的工具，都要考虑"X 本身又调用了它"；
+判断条件不能只看 `isSynchronizationActive()`，要显式记录自己是否正处在回调里。
+
+**附：同轮其它坑**
+- 验收脚本可重复执行的三个前提：清 DB 排队记录、清 `tb_queue_ban_record`、**清 Redis 队列 key**——
+  只清 DB 会留下 ZSet 成员，`ZADD NX` 命中已存在成员后沿用旧 score，顺位直接乱序（这个坑在第一次跑脚本时就踩到了）。
+- `candidate-timeout-minutes` / `ban-days` / `scan-interval-ms` 都改成可用环境变量覆盖
+  （`QUEUE_CANDIDATE_TIMEOUT_MINUTES` 等），验收时把 30 分钟调成 1 分钟即可端到端验证超时链路，不用改代码。
 
 ---
 
