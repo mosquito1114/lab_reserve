@@ -8,7 +8,7 @@
 > - 必须写「证据」：文件路径 / 迁移版本 / 命令 / 验收脚本断言，避免变成主观感想。
 > - 迭代完成并在 `dev` 提交后更新本文件；文末的「待补迭代」按顺序替换成正式条目。
 >
-> **最后更新**：2026-10-24（迭代 6 完成）
+> **最后更新**：2026-10-24（迭代 7 完成）
 
 ---
 
@@ -23,7 +23,8 @@
 | 4 | 资源管理 + 变更留痕 | ① 多条件短路式的「可用性」判定 ② 变更快照该存什么 |
 | 5 | 预约管理 + 并发判冲 | ① 双保险并发（锁 + 生成列唯一索引）② 「调整审批前不改字段」的落地 |
 | 6 | 排队与候补 | ① 顺位不落库（ZSet 唯一真相 + DB 兜底） ② afterCommit 里再注册 afterCommit 的静默丢失 |
-| 7–8 | 运维 / 统计 | 待补（模板见文末） |
+| 7 | 设备运维 | ① 文件校验为什么要读到字节（魔数） ② 工单状态机的越权边界 |
+| 8 | 统计报表 | 待补（模板见文末） |
 
 ---
 
@@ -405,6 +406,77 @@ public void run(Runnable action) {
   只清 DB 会留下 ZSet 成员，`ZADD NX` 命中已存在成员后沿用旧 score，顺位直接乱序（这个坑在第一次跑脚本时就踩到了）。
 - `candidate-timeout-minutes` / `ban-days` / `scan-interval-ms` 都改成可用环境变量覆盖
   （`QUEUE_CANDIDATE_TIMEOUT_MINUTES` 等），验收时把 30 分钟调成 1 分钟即可端到端验证超时链路，不用改代码。
+
+---
+
+## 迭代 7：设备运维
+
+### 难题 1｜「只让传图片」光看后缀不够，必须读到字节
+
+**现象**：把 `malware.txt` 改名成 `fault.png`，只做后缀 + Content-Type 校验的上传接口直接放行；
+浏览器 `<img>` 打不开，但我们已经在 OSS 里存了一个"图片"。反过来，前端 `<input accept="image/*">`
+也只是提示，改个请求就能绕过。
+
+**根因**：文件名和 `Content-Type` 都是**客户端说的**，属于"声明"而不是"事实"；
+真正的类型信息在文件内容的头几个字节里（魔数）。
+
+**解法：三层校验，最后一层必须读流**
+
+| 层 | 检查 | 作用 |
+|---|---|---|
+| 1 | `size ≤ 5MB` | 挡住超大文件（`max-file-size` 只是兜底） |
+| 2 | 后缀白名单 `jpg/jpeg/png/webp` + `Content-Type` 以 `image/` 开头 | 挡住明显的错误上传，给出可读提示 |
+| 3 | **前 12 字节魔数**：JPEG `FF D8 FF` / PNG `89 50 4E 47` / WEBP `RIFF....WEBP` | 挡住改后缀，这是唯一不能伪造的部分 |
+
+- 读流用 `file.getInputStream().readNBytes(12)`，与真正上传用两个独立的流（`MultipartFile` 支持重复打开）；
+- 校验全部通过才 `putObject` 到 OSS，对象 Key 里带 `{bizType}/{yyyy}/{MM}/{uuid}.{ext}`，与原文件名解耦；
+- 返回可访问 URL，**OSS 凭据只在 `.env`**，`application.yml` 里只有 `${OSS_*}` 占位符。
+
+**证据**
+- `service/impl/FileServiceImpl.java`（`matchesMagic` 三个魔数判断 + 三条 `BizException.badRequest`）
+- `util/AliyunOssTemplate.java`（`upload` / `buildObjectKey` / `openStream`）
+- 验收：`iter7_repair.py` 的「6MB → 400」「改后缀 txt → 400 文件内容非法」「正常图片 URL 直接可访问」
+
+**教训**：**文件类型永远不要相信客户端**。后缀是给用户看的，魔数是给服务端判的；
+两者都做，提示才既友好又安全。
+
+### 难题 2｜工单状态机的「谁能在什么状态做什么」比状态本身更容易写错
+
+**现象**：第一版只校验"当前状态是否允许这个动作"，结果：
+维修人 A 能更新指派给 B 的工单（只看状态不看人）；
+管理员能对已归档的工单重新派单；
+验收不通过后，工单状态被改成 `REOPENED`，但维修人不知道能干什么（前端按钮按状态判断，漏了 `REOPENED`）。
+
+**根因**：状态机有两个维度——**状态**与**操作者**。只写 `status in (...)` 相当于只做了一半；
+而"状态流转后哪些人该收到消息、哪些动作重新可用"如果散落在各处，必然漏。
+
+**解法：把「角色 + 归属 + 状态」三件事收在服务层一处判定**
+
+```
+create    : 任意登录（repair:create）
+review    : repair:review（LAB_ADMIN），仅 SUBMITTED / REOPENED
+assign    : repair:assign（LAB_ADMIN），仅非 ACCEPTED / REJECTED；只能派给 MAINTAINER 且 status=1
+progress  : requireAssignee()  —— 工单的 assignee_id 必须 == 当前用户，否则 403
+complete  : 同上 + repairDesc 必填
+accept    : repair:accept（LAB_ADMIN），仅 REPAIRED
+```
+
+- `requireAssignee()` 把"是不是我的工单"做成一个私有方法，所有维修人接口都先过它；
+- 每个流转都发消息给「下一步该动的人」（提交→所有 LAB_ADMIN、派单→维修人、进度→报修人、完成→LAB_ADMIN、验收→维修人+报修人）；
+- `REOPENED` 明确出现在 `progress` / `complete` / `review` 的允许集合里，前端按钮也按同一份状态集合控制。
+
+**证据**
+- `service/impl/RepairServiceImpl.java`（`requireAssignee` / `assign` 的 MAINTAINER 校验 / 各方法的允许状态集合）
+- `views/repair/MyTaskView.vue`（按 `ASSIGNED / REPAIRING / REOPENED` 显示操作按钮）
+- 验收：`iter7_repair.py` 的「维修人 B 操作 A 的工单 403」「维修人调 assign 403」「验收不通过 → REOPENED → 可再次更新进度」
+
+**教训**：**状态机的正确性 = 状态 × 操作者 × 归属**。三者写在同一个方法里，
+前端按同一份状态集合渲染按钮，才不会出现"接口能调但界面没按钮"或"越权能操作"。
+
+**附：同轮其它坑**
+- 验收脚本要真实上传到 OSS 才算数：`bucket` 若是私有读，接口能 200 但前端图片 403 —— 所以脚本额外断言"上传后的 URL 能直接打开"。
+- 复核时顺手改设备状态（`equipmentStatus=2`）会让"维修中设备不可借"这条规则自动生效，不需要在预约模块里加特判；
+  验收通过再把设备置回 `1`，形成闭环。
 
 ---
 
