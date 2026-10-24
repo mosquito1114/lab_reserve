@@ -8,7 +8,7 @@
 > - 必须写「证据」：文件路径 / 迁移版本 / 命令 / 验收脚本断言，避免变成主观感想。
 > - 迭代完成并在 `dev` 提交后更新本文件；文末的「待补迭代」按顺序替换成正式条目。
 >
-> **最后更新**：2026-10-22（迭代 4 完成）
+> **最后更新**：2026-10-24（迭代 5 完成）
 
 ---
 
@@ -21,7 +21,8 @@
 | 2 | 用户管理 + 手机号脱敏 | ① 「本人看自己明文」与全局序列化器冲突 ② 登录后菜单为空 |
 | 3 | 消息通知 + Redis Stream 邮件 | ① 邮件重试语义（PEL / delivery-count）② 收件箱「Redis 索引 + DB 正文」一致性 |
 | 4 | 资源管理 + 变更留痕 | ① 多条件短路式的「可用性」判定 ② 变更快照该存什么 |
-| 5–8 | 预约 / 排队 / 运维 / 统计 | 待补（模板见文末） |
+| 5 | 预约管理 + 并发判冲 | ① 双保险并发（锁 + 生成列唯一索引）② 「调整审批前不改字段」的落地 |
+| 6–8 | 排队 / 运维 / 统计 | 待补（模板见文末） |
 
 ---
 
@@ -255,6 +256,77 @@ XREADGROUP(mailer) → 渲染 → SMTP
 **附：同轮其它坑**
 - 字典删除要先查引用（实验室 `experiment_type_id`、预约 `experiment_type_id` / `slot_id`），被引用时 409 引导改停用，否则历史数据失去含义。
 - 设备库存扣减在没有预约模块（迭代 5）时无法自然验证 → 验收脚本用 `docker exec mysql` 造一条 `R-TEST-ITER4` 夹具预约，验证完立即删除；**测试夹具要能自清理**，否则重复执行会互相污染。
+
+---
+
+## 迭代 5：预约管理（核心）
+
+### 难题 1｜并发判冲的"双保险"：锁和唯一索引谁先谁后
+
+**现象**：同一实验室同一时段，教师 A 和教师 B 几乎同时提交（压测 50 线程），初版只加了分布式锁——
+看着没问题，但一旦锁的租约到期、或部署 2 个实例而锁 key 拼错一个字段，就会落两条 `PENDING`，
+管理员还以为系统在正常工作。
+
+**根因**：分布式锁解决的是"**同时**"，但它是**客户端约定**：租约、时钟、多实例、误删锁都会让它失效。
+真正能约束数据的是数据库的**唯一约束**，而 `tb_reservation` 的占用唯一键又是"条件生成"的——
+只有 `PENDING/APPROVED/CHANGE_PENDING` 才生成 `occupy_key`，其余状态为 NULL（MySQL 唯一索引允许多个 NULL）。
+
+**解法：锁在前、索引兜底，两层都要有**
+
+```
+Redis 锁 lock:reserve:{type}:{resId}:{date}:{slotId}（等待 3s / 租约 10s）
+   └─ 锁内二次判冲（占用集合 {PENDING, APPROVED, CHANGE_PENDING}）
+        └─ 生成预约号（Redis INCR）+ INSERT
+             └─ DB 兜底：uk_reservation_lab_occupy(occupy_key)
+                  └─ 仍撞唯一索引 → 捕获 DuplicateKeyException → 409 SLOT_OCCUPIED
+```
+
+- 锁让 99% 的并发在**应用层**就被挡掉，用户看到的是"该时段已被预约"而不是数据库报错；
+- 唯一索引保证**锁失效时数据也不会脏**，代价只是把异常翻译成同样的 409；
+- 审核通过时同样要"锁内二次判冲"（这期间可能有人抢到了同一时段），只是排除自己那条。
+
+**证据**
+- `util/RedisLockTemplate.java`（`execute(key, supplier)`，拿不到锁抛 409）
+- `service/impl/ReservationServiceImpl#create`（锁内 check → insert → `DuplicateKeyException` 转 409）
+- `service/impl/ReservationServiceImpl#audit`（锁内 `isLabSlotOccupied(..., excludeReservationId)`）
+- `V1__init_schema.sql` 的 `occupy_key` 生成列 + `uk_reservation_lab_occupy`
+- 压测：`scripts/stress/reservation_concurrency.py` 50 并发 → **成功 1 / 409 49 / 0.11s**，库里该时段仅 1 条
+
+**教训**：**并发安全不能只靠"一把锁"**。锁是性能优化 + 用户体验，唯一约束才是正确性的最后一道门；
+两者给出的错误码必须一致（都是 409 + `conflictCode`），否则前端要写两套处理。
+
+### 难题 2｜「调整审批通过前，业务字段一个都不能改」
+
+**现象**：第一版调整申请直接改 `tb_reservation.reserve_date / slot_id`，再写一条"待审批"记录。
+结果审批被驳回时数据已经变了，只能靠"再改回去"补救；而补不回去的情况（比如旧时段被别人抢了）就彻底乱套。
+更隐蔽的是：待审批期间，该预约**仍然占着旧时段**，但列表里显示的却是新时段，管理员判断"这个时段空不空"时会被误导。
+
+**根因**：把"变更内容"和"当前事实"混在一张表里。`tb_reservation` 是当前事实（现在到底占了哪个时段），
+调整申请是"意图"（申请人希望变成什么），两者生命周期不同：意图可能被驳回，事实必须始终真实。
+
+**解法：意图与事实分离，只改状态 + 双快照**
+
+- 发起调整：`tb_reservation_change_request` 写一条 `status=0`，同时存 `before_json`（当前事实）与 `after_json`（期望值）；
+  `tb_reservation` **只把 status 改成 `CHANGE_PENDING`**，`reserve_date` / `slot_id` / 附带设备一行不动。
+- 审批通过：在 `lock:reserve:{新时段}` 锁内 → 校验新时段是否空闲 → 把 `after_json` 回写到预约单 → 状态回 `APPROVED`；
+  取消类申请则置 `CANCELED`。
+- 审批驳回 / 申请人撤销：`status` 回 `APPROVED`，业务字段**本来就没动过**，不需要任何"回滚"。
+- 24h 窗口在**发起时**就拦（`lab-reserve.reservation.change-ahead-hours`），并且用"预约开始时刻 = 日期 + 时段开始时间"计算，
+  不是按日期算（否则 24h 边界会差一整天）。
+
+**证据**
+- `service/impl/ReservationChangeServiceImpl#create`（窗口校验 + 双快照 + 只改 status）
+- `service/impl/ReservationChangeServiceImpl#audit`（锁内校验 → 回写 → 改状态 → afterCommit 发消息）
+- `V1` 的 `tb_reservation_change_request.before_json/after_json`
+- 验收：`iter5_reservation.py` 断言"审批中日期/时段未变"、"通过后日期已更新"、"驳回后回到 APPROVED 且字段未变"
+
+**教训**：**"待审批的变更"必须与"当前事实"分开存**。只要遵循"意图不改事实、通过才回写"，
+驳回/撤销就退化成"改个状态"，不需要写任何补偿逻辑。
+
+**附：同轮其它坑**
+- 站内信要在**事务提交后**发（`AfterCommitUtils` 注册 afterCommit 回调），否则 Redis Stream 消费者可能读不到刚落库的消息，邮件丢失。
+- 种子预约原来写死在 2025-09，演示时全是"已过期"、审核/课表页面空白 → `V7` 迁移整体平移到今天附近（保持相对关系，唯一索引不受影响），
+  同时把 `seed_data.sql` 改成以 `CURDATE()` 为基准，保证全新库也是"本周"的预约。
 
 ---
 
