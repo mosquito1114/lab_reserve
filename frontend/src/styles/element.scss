@@ -1,0 +1,119 @@
+/**
+ * Element Plus 主题
+ *
+ * 分两部分：
+ *   1. 变量映射（本文件上半部分）：把 --el-* 指到设计令牌 → 一处改色全站生效
+ *   2. 组件形态与材质（本文件下半部分）：圆角、磨砂、按钮体系、分段控件等
+ *
+ * 引入顺序要求：必须在 element-plus/dist/index.css 之后。
+ */
+
+@use './tokens';
+
+/* ============================================================
+ * 一、变量映射（换皮）
+ * ============================================================ */
+
+:root {
+  /* ---------- 主色 + 5 档浅色（由主色与白/黑混合算出，勿手调） ---------- */
+  --el-color-primary: #b05d2e;
+  --el-color-primary-light-3: #c88e6d;
+  --el-color-primary-light-5: #d8ae97;
+  --el-color-primary-light-7: #e7cec0;
+  --el-color-primary-light-8: #efdfd5;
+  --el-color-primary-light-9: #f7efea;
+  --el-color-primary-dark-2: #8d4a25;
+
+  /* ---------- 语义色 ---------- */
+  --el-color-success: #2d6a4f;
+  --el-color-success-light-3: #6c9784;
+  --el-color-success-light-5: #96b5a7;
+  --el-color-success-light-7: #c0d2ca;
+  --el-color-success-light-8: #d5e1dc;
+  --el-color-success-light-9: #eaf0ed;
+  --el-color-success-dark-2: #24553f;
+
+  --el-color-warning: #c98a3e;
+  --el-color-warning-light-3: #d9ad78;
+  --el-color-warning-light-5: #e4c59f;
+  --el-color-warning-light-7: #efdcc5;
+  --el-color-warning-light-8: #f4e8d8;
+  --el-color-warning-light-9: #faf3ec;
+  --el-color-warning-dark-2: #a16e32;
+
+  --el-color-danger: #ef4444;
+  --el-color-danger-light-3: #f47c7c;
+  --el-color-danger-light-5: #f7a2a2;
+  --el-color-danger-light-7: #fac7c7;
+  --el-color-danger-light-8: #fcdada;
+  --el-color-danger-light-9: #fdecec;
+  --el-color-danger-dark-2: #bf3636;
+
+  --el-color-info: #8a8078;
+  --el-color-info-light-3: #ada6a1;
+  --el-color-info-light-5: #c5c0bc;
+  --el-color-info-light-7: #dcd9d7;
+  --el-color-info-light-8: #e8e6e4;
+  --el-color-info-light-9: #f3f2f2;
+  --el-color-info-dark-2: #6e6660;
+
+  /* ---------- 文字 ---------- */
+  --el-text-color-primary: var(--lr-text-primary);
+  --el-text-color-regular: var(--lr-text-regular);
+  --el-text-color-secondary: var(--lr-text-secondary);
+  --el-text-color-placeholder: var(--lr-text-placeholder);
+  --el-text-color-disabled: #b8b1aa;
+
+  /* ---------- 描边 ---------- */
+  --el-border-color: var(--lr-border);
+  --el-border-color-light: var(--lr-border-light);
+  --el-border-color-lighter: var(--lr-border-light);
+  --el-border-color-extra-light: #efebe7;
+  --el-border-color-dark: var(--lr-border-dark);
+  --el-border-color-darker: #bab3ab;
+
+  /* ---------- 底色与填充 ---------- */
+  --el-bg-color: var(--lr-bg-card);
+  --el-bg-color-page: var(--lr-bg-page);
+  --el-bg-color-overlay: var(--lr-bg-raised);
+  --el-fill-color-blank: var(--lr-bg-card);
+  --el-fill-color: #ebe8e4;
+  --el-fill-color-light: var(--lr-bg-hover);
+  --el-fill-color-lighter: #f0eeec;
+  --el-fill-color-extra-light: #f5f3f1;
+  --el-fill-color-dark: #e0ddd9;
+  --el-fill-color-darker: #d3cfc9;
+
+  /* ---------- 圆角 / 字号 / 控件高度 ---------- */
+  --el-border-radius-base: var(--lr-radius-control);
+  --el-border-radius-small: var(--lr-radius-sm);
+  --el-border-radius-round: var(--lr-radius-pill);
+  --el-font-size-base: var(--lr-font);
+  --el-component-size: 36px;
+  --el-component-size-small: 30px;
+  --el-component-size-large: 42px;
+
+  /* ---------- 阴影 ---------- */
+  --el-box-shadow: var(--lr-shadow-md);
+  --el-box-shadow-light: var(--lr-shadow-sm);
+  --el-box-shadow-lighter: var(--lr-shadow-xs);
+  --el-box-shadow-dark: var(--lr-shadow-lg);
+}
+
+/* ---------- 表格的颜色变量（形态在第二部分） ---------- */
+.el-table {
+  --el-table-border-color: var(--lr-border-light);
+  --el-table-header-bg-color: var(--lr-primary-soft);
+  --el-table-header-text-color: var(--lr-text-regular);
+  --el-table-row-hover-bg-color: var(--lr-primary-soft);
+  --el-table-text-color: var(--lr-text-regular);
+  --el-table-bg-color: var(--lr-bg-card);
+  --el-table-tr-bg-color: var(--lr-bg-card);
+}
+
+/* ---------- 标签的颜色（pill 形态在第二部分） ---------- */
+.el-tag--primary {
+  --el-tag-bg-color: var(--lr-primary-soft);
+  --el-tag-border-color: var(--lr-primary-soft-2);
+  --el-tag-text-color: var(--lr-primary-active);
+}
