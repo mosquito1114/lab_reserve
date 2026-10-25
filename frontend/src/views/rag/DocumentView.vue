@@ -791,11 +791,11 @@ onBeforeUnmount(() => {
 }
 
 :deep(.row-processing) {
-  background-color: #f0f9eb !important;
+  background-color: var(--lr-success-soft) !important;
 }
 
 :deep(.row-failed) {
-  background-color: #fef0f0 !important;
+  background-color: var(--lr-danger-soft) !important;
 }
 
 /* ---------- 上传表单 ---------- */
@@ -829,7 +829,7 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px dashed #ebeef5;
+  border-bottom: 1px dashed var(--lr-border-light);
 
   &:last-child {
     border-bottom: none;
@@ -916,8 +916,8 @@ onBeforeUnmount(() => {
 .chunk-item {
   padding: 12px;
   margin-bottom: 12px;
-  background: #fafafa;
-  border: 1px solid #ebeef5;
+  background: var(--lr-bg-page);
+  border: 1px solid var(--lr-border-light);
   border-radius: var(--lr-radius-sm);
 }
 

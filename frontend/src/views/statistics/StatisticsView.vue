@@ -1,5 +1,7 @@
 <template>
   <div class="page-container">
+    <PageHeader title="统计报表" subtitle="数据口径由后端统一聚合，与 Excel 导出一致" />
+
     <el-card shadow="never" class="filter-card">
       <el-form :model="query" inline @submit.prevent>
         <el-form-item label="日期区间">
@@ -34,22 +36,22 @@
     </el-card>
 
     <el-row :gutter="12" class="stat-row">
-      <el-col :span="6" v-for="card in cards" :key="card.label">
+      <el-col :xs="24" :sm="12" :lg="6" v-for="card in cards" :key="card.label">
         <el-card shadow="never" class="stat-card">
           <div class="stat-label">{{ card.label }}</div>
-          <div class="stat-value">{{ card.value }}</div>
+          <div class="stat-value tabular">{{ card.value }}</div>
           <div class="stat-hint text-secondary">{{ card.hint }}</div>
         </el-card>
       </el-col>
     </el-row>
 
     <el-row :gutter="12" v-loading="loading">
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <el-card shadow="never" header="资源占用率（Top 10 实验室）">
           <div ref="occupancyRef" class="chart" />
         </el-card>
       </el-col>
-      <el-col :span="12">
+      <el-col :xs="24" :lg="12">
         <el-card shadow="never" header="实验类型占比">
           <div ref="typeRef" class="chart" />
         </el-card>
@@ -57,12 +59,12 @@
     </el-row>
 
     <el-row :gutter="12" class="mt-16">
-      <el-col :span="10">
+      <el-col :xs="24" :lg="10">
         <el-card shadow="never" header="预约成功率">
           <div ref="successRef" class="chart" />
         </el-card>
       </el-col>
-      <el-col :span="14">
+      <el-col :xs="24" :lg="14">
         <el-card shadow="never">
           <template #header>
             <div class="chart-header">
@@ -97,6 +99,13 @@ import {
   type StatisticsOverview
 } from '@/api/statistics'
 import { listExperimentTypes, listLaboratoryOptions, type ExperimentTypeItem, type LaboratoryOption } from '@/api/resource'
+
+/** 图表统一色板（暖赭 6 色，取自 axonhub 的 .claude 方案） */
+const CHART_COLORS = ['#b05d2e', '#7a381d', '#2d6a4f', '#9c6644', '#d4a373', '#7c3aed']
+const AXIS_LABEL_STYLE = { color: '#5c564f', fontSize: 12 }
+const AXIS_LINE_STYLE = { lineStyle: { color: '#d8d4cf' } }
+const SPLIT_LINE_STYLE = { lineStyle: { color: '#e3dfd9' } }
+const CHART_BORDER = '#f5f5f4'
 
 const loading = ref(false)
 const exporting = ref<string | null>(null)
@@ -167,46 +176,73 @@ async function loadAll(): Promise<void> {
     overview.value = overviewData
     await nextTick()
     setChart(occupancyRef.value, {
+      color: CHART_COLORS,
       tooltip: { trigger: 'axis' },
-      grid: { left: 40, right: 20, top: 20, bottom: 70 },
+      grid: { left: 8, right: 16, top: 20, bottom: 60, containLabel: true },
       xAxis: {
         type: 'category',
         data: occupancy.byLab.slice(0, 10).map((item) => item.labNo),
-        axisLabel: { rotate: 30 }
+        axisLabel: { ...AXIS_LABEL_STYLE, rotate: 30 },
+        axisLine: AXIS_LINE_STYLE,
+        axisTick: { show: false }
       },
-      yAxis: { type: 'value', max: 1, axisLabel: { formatter: (v: number) => `${Math.round(v * 100)}%` } },
+      yAxis: {
+        type: 'value',
+        max: 1,
+        axisLabel: { ...AXIS_LABEL_STYLE, formatter: (v: number) => `${Math.round(v * 100)}%` },
+        splitLine: SPLIT_LINE_STYLE
+      },
       series: [{
         type: 'bar',
         name: '占用率',
+        barWidth: 32,
         data: occupancy.byLab.slice(0, 10).map((item) => item.occupancyRate),
-        itemStyle: { color: '#409eff', borderRadius: [4, 4, 0, 0] }
+        itemStyle: { color: '#b05d2e', borderRadius: [6, 6, 0, 0] }
       }]
     })
     setChart(typeRef.value, {
+      color: CHART_COLORS,
       tooltip: { trigger: 'item', formatter: '{b}: {c} 次（{d}%）' },
-      legend: { bottom: 0 },
+      legend: {
+        bottom: 0,
+        icon: 'circle',
+        itemWidth: 8,
+        itemHeight: 8,
+        itemGap: 16,
+        textStyle: AXIS_LABEL_STYLE
+      },
       series: [{
         type: 'pie',
         radius: ['35%', '65%'],
+        itemStyle: { borderColor: CHART_BORDER, borderWidth: 2 },
         data: ratio.items.map((item) => ({ name: item.name, value: item.count })),
-        label: { formatter: '{b}\n{d}%' }
+        label: { formatter: '{b}\n{d}%', color: '#5c564f', fontSize: 12 }
       }]
     })
     setChart(successRef.value, {
+      color: CHART_COLORS,
       tooltip: {},
-      legend: { bottom: 0 },
+      legend: {
+        bottom: 0,
+        icon: 'circle',
+        itemWidth: 8,
+        itemHeight: 8,
+        itemGap: 16,
+        textStyle: AXIS_LABEL_STYLE
+      },
       series: [{
         type: 'pie',
         radius: ['50%', '70%'],
         label: { show: false },
+        itemStyle: { borderColor: CHART_BORDER, borderWidth: 2 },
         data: [
-          { name: '已通过', value: success.approved, itemStyle: { color: '#67c23a' } },
-          { name: '已驳回', value: success.rejected, itemStyle: { color: '#f56c6c' } },
-          { name: '已取消', value: success.canceled, itemStyle: { color: '#909399' } },
+          { name: '已通过', value: success.approved, itemStyle: { color: '#2d6a4f' } },
+          { name: '已驳回', value: success.rejected, itemStyle: { color: '#ef4444' } },
+          { name: '已取消', value: success.canceled, itemStyle: { color: '#8a8078' } },
           {
             name: '其他',
             value: Math.max(0, success.total - success.approved - success.rejected - success.canceled),
-            itemStyle: { color: '#dcdfe6' }
+            itemStyle: { color: '#e3dfd9' }
           }
         ]
       }],
@@ -216,6 +252,7 @@ async function loadAll(): Promise<void> {
         top: '42%',
         style: {
           text: `${Math.round(success.successRate * 100)}%`,
+          fill: '#292524',
           fontSize: 22,
           fontWeight: 'bold'
         }
@@ -231,16 +268,69 @@ async function loadTrend(): Promise<void> {
   const trend = await getReservationTrend({ ...baseQuery(), groupBy: groupBy.value })
   await nextTick()
   setChart(trendRef.value, {
+    color: CHART_COLORS,
     tooltip: { trigger: 'axis' },
-    legend: { top: 0 },
-    grid: { left: 40, right: 20, top: 40, bottom: 30 },
-    xAxis: { type: 'category', data: trend.items.map((item) => item.period) },
-    yAxis: { type: 'value' },
+    legend: {
+      top: 0,
+      icon: 'circle',
+      itemWidth: 8,
+      itemHeight: 8,
+      itemGap: 16,
+      textStyle: AXIS_LABEL_STYLE
+    },
+    grid: { left: 8, right: 16, top: 44, bottom: 24, containLabel: true },
+    xAxis: {
+      type: 'category',
+      data: trend.items.map((item) => item.period),
+      axisLabel: AXIS_LABEL_STYLE,
+      axisLine: AXIS_LINE_STYLE,
+      axisTick: { show: false }
+    },
+    yAxis: { type: 'value', axisLabel: AXIS_LABEL_STYLE, splitLine: SPLIT_LINE_STYLE },
     series: [
-      { type: 'line', name: '总数', smooth: true, data: trend.items.map((item) => item.total) },
-      { type: 'line', name: '已通过', smooth: true, data: trend.items.map((item) => item.approved) },
-      { type: 'line', name: '已驳回', smooth: true, data: trend.items.map((item) => item.rejected) },
-      { type: 'line', name: '已取消', smooth: true, data: trend.items.map((item) => item.canceled) }
+      {
+        type: 'line',
+        name: '总数',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        lineStyle: { width: 2 },
+        // 只给「总数」一条加面积渐变，避免四条线互相干扰
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(176, 93, 46, 0.18)' },
+            { offset: 1, color: 'rgba(176, 93, 46, 0)' }
+          ])
+        },
+        data: trend.items.map((item) => item.total)
+      },
+      {
+        type: 'line',
+        name: '已通过',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        lineStyle: { width: 2 },
+        data: trend.items.map((item) => item.approved)
+      },
+      {
+        type: 'line',
+        name: '已驳回',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        lineStyle: { width: 2 },
+        data: trend.items.map((item) => item.rejected)
+      },
+      {
+        type: 'line',
+        name: '已取消',
+        smooth: true,
+        symbol: 'circle',
+        symbolSize: 5,
+        lineStyle: { width: 2 },
+        data: trend.items.map((item) => item.canceled)
+      }
     ]
   })
 }
@@ -295,27 +385,28 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .stat-row {
-  margin-bottom: 12px;
+  margin-bottom: var(--lr-card-gap);
 }
 
 .stat-card {
-  text-align: center;
+  text-align: left;
 }
 
 .stat-label {
-  color: var(--el-text-color-secondary);
-  font-size: 13px;
+  color: var(--lr-text-secondary);
+  font-size: var(--lr-font-sm);
 }
 
 .stat-value {
-  font-size: 26px;
-  font-weight: 700;
   margin: 6px 0;
-  color: var(--el-color-primary);
+  font-size: var(--lr-font-2xl);
+  font-weight: 700;
+  color: var(--lr-text-primary);
+  letter-spacing: -0.02em;
 }
 
 .stat-hint {
-  font-size: 12px;
+  font-size: var(--lr-font-xs);
 }
 
 .chart {

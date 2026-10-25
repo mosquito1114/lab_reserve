@@ -1,33 +1,25 @@
 /**
- * 全局样式
+ * 全局基础样式
  *
- * 只放：基础重置、CSS 变量、少量通用类。
- * 组件级样式一律写在各自的 <style scoped> 里。
+ * 只放四件事：
+ *   1. 基础重置
+ *   2. 页面光晕（让半透明面板有内容可透）
+ *   3. 滚动条
+ *   4. 通用工具类（页面级复用的 class）
+ *
+ * 颜色 / 间距 / 圆角一律引用 tokens.scss 的变量，禁止写死色值。
+ * 组件私有样式请写在各自 <style scoped> 里。
  */
 
-:root {
-  --lr-primary: #409eff;
-  --lr-success: #67c23a;
-  --lr-warning: #e6a23c;
-  --lr-danger: #f56c6c;
-  --lr-info: #909399;
+@use './tokens';
 
-  --lr-text-primary: #303133;
-  --lr-text-regular: #606266;
-  --lr-text-secondary: #909399;
+/* ============================================================
+ * 一、基础重置
+ * ============================================================ */
 
-  --lr-border: #dcdfe6;
-  --lr-bg-page: #f5f7fa;
-
-  --lr-radius: 6px;
-  --lr-radius-sm: 4px;
-
-  --lr-header-height: 56px;
-  --lr-sidebar-width: 220px;
-  --lr-sidebar-width-collapsed: 64px;
-}
-
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -40,64 +32,133 @@ body,
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-  font-size: 14px;
+  font-family: var(--lr-font-family);
+  font-size: var(--lr-font);
+  line-height: 1.6;
   color: var(--lr-text-primary);
   background-color: var(--lr-bg-page);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin: 0;
+}
+
 a {
   color: var(--lr-primary);
   text-decoration: none;
+  transition: color var(--lr-duration) var(--lr-ease);
 }
 
-/* ---------- 滚动条 ---------- */
+a:hover {
+  color: var(--lr-primary-hover);
+}
+
+/* ============================================================
+ * 二、页面光晕
+ *
+ * 极淡的暖色径向渐变，铺在最底层。磨砂面板 / 半透明卡片
+ * 透出来的就是这层颜色 —— 没有它，磨砂看起来只是"发灰"。
+ * ============================================================ */
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: '';
+  background:
+    radial-gradient(620px 440px at 6% -4%, rgb(176 93 46 / 14%), transparent 68%),
+    radial-gradient(560px 400px at 96% 2%, rgb(212 163 115 / 16%), transparent 70%),
+    radial-gradient(600px 460px at 74% 106%, rgb(122 56 29 / 9%), transparent 68%);
+}
+
+/* ============================================================
+ * 三、滚动条
+ * ============================================================ */
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background-color: rgb(144 147 153 / 35%);
-  border-radius: 4px;
+  background-color: rgb(139 128 120 / 32%);
+  border-radius: var(--lr-space-1);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(144 147 153 / 55%);
+  background-color: rgb(139 128 120 / 55%);
 }
 
 ::-webkit-scrollbar-track {
   background-color: transparent;
 }
 
-/* ---------- 通用布局辅助 ---------- */
+/* ============================================================
+ * 四、页面骨架
+ * ============================================================ */
+
+/* 业务页根容器：限制最大宽度 + 统一步调 */
 .page-container {
-  padding: 16px;
+  max-width: var(--lr-content-max);
+  margin: 0 auto;
+  padding: var(--lr-page-gutter);
 }
 
 .page-card {
-  background: #fff;
-  border-radius: var(--lr-radius);
-  padding: 16px;
+  padding: var(--lr-space-5);
+  background: var(--lr-bg-card);
+  border: 1px solid var(--lr-border-light);
+  border-radius: var(--lr-radius-lg);
+  box-shadow: var(--lr-shadow-sm);
+}
+
+/* 筛选卡片：全局定义一份，取代 18 个页面里各写各的（其中 18 个页面漏了定义 → 间距为 0） */
+.filter-card {
+  margin-bottom: var(--lr-card-gap);
 }
 
 .filter-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: var(--lr-space-3);
   align-items: center;
-  margin-bottom: 16px;
+  margin-bottom: var(--lr-space-4);
 }
 
 .table-toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  gap: var(--lr-space-3);
+  margin-bottom: var(--lr-space-3);
 }
+
+/* 卡片头部左右分栏（原在 dashboard / ProfileView / RoleView / AvailabilityView 各定义一遍） */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--lr-space-3);
+}
+
+/* 分页统一右对齐（原在 16 个页面各定义一遍） */
+.pagination {
+  justify-content: flex-end;
+  margin-top: var(--lr-space-4);
+}
+
+/* ============================================================
+ * 五、文本工具
+ * ============================================================ */
 
 .text-secondary {
   color: var(--lr-text-secondary);
@@ -107,24 +168,62 @@ a {
   color: var(--lr-danger);
 }
 
-.mt-8 {
-  margin-top: 8px;
+.text-success {
+  color: var(--lr-success);
 }
 
-.mt-16 {
-  margin-top: 16px;
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.mb-16 {
-  margin-bottom: 16px;
+/* 等宽数字：指标类数字切换时不跳动 */
+.tabular {
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---------- Element Plus 微调 ---------- */
-.el-table th.el-table__cell {
-  background-color: #fafafa !important;
-  font-weight: 600;
+/* ============================================================
+ * 六、间距工具
+ * ============================================================ */
+
+.mt-4 { margin-top: var(--lr-space-1); }
+.mt-8 { margin-top: var(--lr-space-2); }
+.mt-12 { margin-top: var(--lr-space-3); }
+.mt-16 { margin-top: var(--lr-space-4); }
+.mt-24 { margin-top: var(--lr-space-6); }
+.mb-8 { margin-bottom: var(--lr-space-2); }
+.mb-12 { margin-bottom: var(--lr-space-3); }
+.mb-16 { margin-bottom: var(--lr-space-4); }
+.mb-24 { margin-bottom: var(--lr-space-6); }
+.ml-4 { margin-left: var(--lr-space-1); }
+.ml-8 { margin-left: var(--lr-space-2); }
+.mr-8 { margin-right: var(--lr-space-2); }
+
+/* ============================================================
+ * 七、宽度工具
+ * ============================================================ */
+
+.w-100 { width: 100px; }
+.w-120 { width: 120px; }
+.w-140 { width: 140px; }
+.w-150 { width: 150px; }
+.w-160 { width: 160px; }
+.w-180 { width: 180px; }
+.w-240 { width: 240px; }
+.w-360 { width: 360px; }
+.w-full { width: 100%; }
+
+/* ============================================================
+ * 八、路由切换过渡
+ * ============================================================ */
+
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.15s ease;
 }
 
-.el-card {
-  border-radius: var(--lr-radius);
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }

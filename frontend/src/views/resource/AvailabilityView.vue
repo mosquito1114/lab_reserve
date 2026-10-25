@@ -226,11 +226,11 @@ onMounted(async () => {
   border: 1px solid var(--el-border-color-light);
   border-radius: 8px;
   padding: 12px;
-  background: #fff;
+  background: var(--lr-bg-card);
 }
 
 .slot-card.is-full {
-  background: #fafafa;
+  background: var(--lr-bg-page);
 }
 
 .slot-head {

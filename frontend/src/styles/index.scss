@@ -1,0 +1,14 @@
+/**
+ * 样式入口
+ *
+ * 引入顺序有意义：
+ *   tokens  → 定义设计令牌
+ *   element → 用令牌覆盖 Element Plus 默认主题并调整组件形态
+ *   global  → 基础重置 + 光晕 + 通用工具类
+ *
+ * 由 main.ts 唯一引入（不要再单独 import global.scss / element.scss）。
+ */
+
+@use './tokens';
+@use './element';
+@use './global';

@@ -1,78 +1,92 @@
 <template>
-  <el-container class="layout">
-    <!-- ---------- 侧边栏 ---------- -->
-    <el-aside class="layout-aside" :width="collapsed ? 'var(--lr-sidebar-width-collapsed)' : 'var(--lr-sidebar-width)'">
-      <div class="layout-logo">
-        <el-icon :size="22" color="#fff"><School /></el-icon>
-        <span v-show="!collapsed" class="layout-logo-text">实验室预约</span>
+  <el-container class="layout" direction="vertical">
+    <!-- ==================== 通栏顶栏（悬浮在内容之上，磨砂） ==================== -->
+    <el-header class="layout-header">
+      <div class="layout-header-left">
+        <div class="layout-brand" @click="router.push('/dashboard')">
+          <span class="layout-brand-badge">
+            <el-icon :size="17" color="#fff"><School /></el-icon>
+          </span>
+          <span class="layout-brand-text">实验室预约</span>
+        </div>
+        <el-divider direction="vertical" class="layout-brand-divider" />
+        <el-breadcrumb separator="/">
+          <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
+          <el-breadcrumb-item v-if="currentTitle && route.path !== '/dashboard'">
+            {{ currentTitle }}
+          </el-breadcrumb-item>
+        </el-breadcrumb>
       </div>
 
-      <el-scrollbar>
-        <el-menu
-          :default-active="activeMenu"
-          :collapse="collapsed"
-          :collapse-transition="false"
-          background-color="#20293f"
-          text-color="#c3cbdc"
-          active-text-color="#ffffff"
-          router
+      <div class="layout-header-right">
+        <el-tooltip
+          :content="messageStore.unread > 0 ? `有 ${messageStore.unread} 条未读消息` : '消息中心'"
+          placement="bottom"
         >
-          <!-- 菜单由后端按权限下发（见 MenuService），这里只负责渲染 -->
-          <template v-for="menu in userStore.menus" :key="menu.path">
-            <el-sub-menu v-if="menu.children?.length" :index="menu.path">
-              <template #title>
-                <el-icon><component :is="menu.icon || 'Menu'" /></el-icon>
-                <span>{{ menu.title }}</span>
-              </template>
-              <el-menu-item v-for="child in menu.children" :key="child.path" :index="child.path">
-                <el-icon><component :is="child.icon || 'Menu'" /></el-icon>
-                <template #title>{{ child.title }}</template>
-              </el-menu-item>
-            </el-sub-menu>
-            <el-menu-item v-else :index="menu.path">
-              <el-icon><component :is="menu.icon || 'Menu'" /></el-icon>
-              <template #title>{{ menu.title }}</template>
-            </el-menu-item>
-          </template>
-        </el-menu>
-      </el-scrollbar>
-    </el-aside>
-
-    <el-container>
-      <!-- ---------- 顶栏 ---------- -->
-      <el-header class="layout-header">
-        <div class="layout-header-left">
-          <el-icon class="layout-collapse" @click="collapsed = !collapsed">
-            <component :is="collapsed ? 'Expand' : 'Fold'" />
-          </el-icon>
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item :to="{ path: '/dashboard' }">首页</el-breadcrumb-item>
-            <el-breadcrumb-item v-if="currentTitle">{{ currentTitle }}</el-breadcrumb-item>
-          </el-breadcrumb>
-        </div>
-
-        <div class="layout-header-right">
-          <el-tooltip
-            :content="messageStore.unread > 0 ? `有 ${messageStore.unread} 条未读消息` : '消息中心'"
-            placement="bottom"
+          <el-badge
+            :value="messageStore.unread"
+            :max="99"
+            :hidden="messageStore.unread === 0"
+            class="layout-badge"
+            @click="gotoInbox"
           >
-            <el-badge
-              :value="messageStore.unread"
-              :max="99"
-              :hidden="messageStore.unread === 0"
-              class="layout-badge"
-              @click="gotoInbox"
-            >
-              <el-icon :size="18"><Bell /></el-icon>
-            </el-badge>
-          </el-tooltip>
+            <el-icon :size="18"><Bell /></el-icon>
+          </el-badge>
+        </el-tooltip>
 
-          <el-dropdown trigger="click" @command="handleCommand">
-            <span class="layout-user">
-              <el-avatar :size="28" class="layout-avatar">{{ avatarText }}</el-avatar>
-              <span class="layout-user-name">{{ displayName }}</span>
-              <el-icon><ArrowDown /></el-icon>
-            </span>
+        <el-icon class="layout-collapse" @click="collapsed = !collapsed">
+          <component :is="collapsed ? 'Expand' : 'Fold'" />
+        </el-icon>
+      </div>
+    </el-header>
+
+    <el-container class="layout-body">
+      <!-- ==================== 浮动侧栏（半透明磨砂面板） ==================== -->
+      <el-aside
+        class="layout-aside"
+        :width="collapsed ? 'var(--lr-sidebar-width-collapsed)' : 'var(--lr-sidebar-width)'"
+      >
+        <el-scrollbar class="layout-menu-scroll">
+          <el-menu
+            :default-active="activeMenu"
+            :collapse="collapsed"
+            :collapse-transition="false"
+            background-color="transparent"
+            text-color="#5c564f"
+            active-text-color="#ffffff"
+            router
+          >
+            <!-- 菜单由后端按权限下发（见 MenuService），这里只负责渲染 -->
+            <template v-for="menu in userStore.menus" :key="menu.path">
+              <el-sub-menu v-if="menu.children?.length" :index="menu.path">
+                <template #title>
+                  <el-icon><component :is="menu.icon || 'Menu'" /></el-icon>
+                  <span>{{ menu.title }}</span>
+                </template>
+                <el-menu-item v-for="child in menu.children" :key="child.path" :index="child.path">
+                  <el-icon><component :is="child.icon || 'Menu'" /></el-icon>
+                  <template #title>{{ child.title }}</template>
+                </el-menu-item>
+              </el-sub-menu>
+              <el-menu-item v-else :index="menu.path">
+                <el-icon><component :is="menu.icon || 'Menu'" /></el-icon>
+                <template #title>{{ menu.title }}</template>
+              </el-menu-item>
+            </template>
+          </el-menu>
+        </el-scrollbar>
+
+        <!-- ---------- 底部用户块（向上弹出） ---------- -->
+        <div class="layout-user-card">
+          <el-dropdown trigger="click" placement="top-start" @command="handleCommand">
+            <div class="layout-user" :class="{ 'is-collapsed': collapsed }">
+              <el-avatar :size="32" class="layout-avatar">{{ avatarText }}</el-avatar>
+              <div v-show="!collapsed" class="layout-user-meta">
+                <span class="layout-user-name">{{ displayName }}</span>
+                <span class="layout-user-role">{{ roleLabel }}</span>
+              </div>
+              <el-icon v-show="!collapsed" class="layout-user-caret"><ArrowUp /></el-icon>
+            </div>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item disabled>{{ roleLabel }}</el-dropdown-item>
@@ -88,9 +102,9 @@
             </template>
           </el-dropdown>
         </div>
-      </el-header>
+      </el-aside>
 
-      <!-- ---------- 内容区 ---------- -->
+      <!-- ==================== 内容区 ==================== -->
       <el-main class="layout-main" :class="{ 'is-full-height': isFullHeight }">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
@@ -100,31 +114,31 @@
       </el-main>
     </el-container>
 
-  <!-- ---------- 修改密码 ---------- -->
-  <el-dialog v-model="passwordVisible" title="修改密码" width="420px">
-    <el-alert
-      class="mb-16"
-      type="warning"
-      :closable="false"
-      title="修改成功后当前登录会立即失效，需要用新密码重新登录"
-      show-icon
-    />
-    <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="88px">
-      <el-form-item label="原密码" prop="oldPassword">
-        <el-input v-model="passwordForm.oldPassword" type="password" show-password placeholder="请输入原密码" />
-      </el-form-item>
-      <el-form-item label="新密码" prop="newPassword">
-        <el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="6~64 位" />
-      </el-form-item>
-      <el-form-item label="确认新密码" prop="confirmPassword">
-        <el-input v-model="passwordForm.confirmPassword" type="password" show-password placeholder="再次输入新密码" />
-      </el-form-item>
-    </el-form>
-    <template #footer>
-      <el-button @click="passwordVisible = false">取消</el-button>
-      <el-button type="primary" :loading="passwordSaving" @click="handlePasswordSubmit">确定</el-button>
-    </template>
-  </el-dialog>
+    <!-- ==================== 修改密码 ==================== -->
+    <el-dialog v-model="passwordVisible" title="修改密码" width="420px">
+      <el-alert
+        class="mb-16"
+        type="warning"
+        :closable="false"
+        title="修改成功后当前登录会立即失效，需要用新密码重新登录"
+        show-icon
+      />
+      <el-form ref="passwordFormRef" :model="passwordForm" :rules="passwordRules" label-width="88px">
+        <el-form-item label="原密码" prop="oldPassword">
+          <el-input v-model="passwordForm.oldPassword" type="password" show-password placeholder="请输入原密码" />
+        </el-form-item>
+        <el-form-item label="新密码" prop="newPassword">
+          <el-input v-model="passwordForm.newPassword" type="password" show-password placeholder="6~64 位" />
+        </el-form-item>
+        <el-form-item label="确认新密码" prop="confirmPassword">
+          <el-input v-model="passwordForm.confirmPassword" type="password" show-password placeholder="再次输入新密码" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="passwordVisible = false">取消</el-button>
+        <el-button type="primary" :loading="passwordSaving" @click="handlePasswordSubmit">确定</el-button>
+      </template>
+    </el-dialog>
   </el-container>
 </template>
 
@@ -232,7 +246,7 @@ async function handlePasswordSubmit(): Promise<void> {
   }
 }
 
-// ---------------- 顶部下拉 ----------------
+// ---------------- 用户块下拉 ----------------
 
 async function handleCommand(command: string): Promise<void> {
   if (command === 'password') {
@@ -286,110 +300,277 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped lang="scss">
+/* 顶栏悬浮高度 + 内容上边距，两处必须一致 */
+$header-overlap: calc(var(--lr-header-height) + var(--lr-sidebar-gap));
+
 .layout {
+  position: relative;
   height: 100%;
+  background-color: transparent;
 }
 
-/* ---------- 侧边栏 ---------- */
-.layout-aside {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background-color: #20293f;
-  transition: width 0.2s;
-}
-
-.layout-logo {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  height: var(--lr-header-height);
-  padding-left: 20px;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.layout-logo-text {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-}
-
-:deep(.el-menu) {
-  border-right: none;
-}
-
-/* ---------- 顶栏 ---------- */
+/* ==================== 通栏顶栏 ==================== */
+/* 绝对定位 + 磨砂：内容滚动时从顶栏下方模糊穿过 */
 .layout-header {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   justify-content: space-between;
   height: var(--lr-header-height);
-  background: #fff;
-  border-bottom: 1px solid #ebeef5;
+  padding: 0 20px;
+  background-color: var(--lr-material-thin);
+  box-shadow: var(--lr-shadow-inset-hairline);
+  -webkit-backdrop-filter: saturate(var(--lr-material-thin-saturate)) blur(var(--lr-material-thin-blur));
+  backdrop-filter: saturate(var(--lr-material-thin-saturate)) blur(var(--lr-material-thin-blur));
 }
 
 .layout-header-left {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   align-items: center;
+  min-width: 0;
 }
 
-.layout-collapse {
-  font-size: 18px;
-  color: var(--lr-text-regular);
+.layout-brand {
+  display: flex;
+  flex-shrink: 0;
+  gap: 10px;
+  align-items: center;
   cursor: pointer;
+  user-select: none;
+}
 
-  &:hover {
-    color: var(--lr-primary);
-  }
+.layout-brand-badge {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--lr-gradient-primary);
+  border-radius: var(--lr-radius-control);
+  box-shadow: var(--lr-shadow-primary);
+}
+
+.layout-brand-text {
+  font-size: var(--lr-font-lg);
+  font-weight: 600;
+  color: var(--lr-text-primary);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.layout-brand-divider {
+  height: 18px;
+  margin: 0;
+  border-left-color: var(--lr-border);
 }
 
 .layout-header-right {
   display: flex;
-  gap: 20px;
+  flex-shrink: 0;
+  gap: 8px;
   align-items: center;
 }
 
-.layout-badge {
+.layout-badge,
+.layout-collapse {
   display: flex;
   align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
   color: var(--lr-text-regular);
   cursor: pointer;
+  border-radius: var(--lr-radius-control);
+  transition: background-color var(--lr-duration) var(--lr-ease),
+    color var(--lr-duration) var(--lr-ease);
 
   &:hover {
     color: var(--lr-primary);
+    background-color: var(--lr-bg-hover);
   }
+}
+
+.layout-collapse {
+  font-size: 18px;
+}
+
+/* ==================== 主体 ==================== */
+/* 左上是给悬浮顶栏让出的空间；内容区从视口顶部开始滚动，才能穿过顶栏 */
+.layout-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---------- 浮动侧栏 ---------- */
+.layout-aside {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  margin: $header-overlap var(--lr-space-4) var(--lr-sidebar-gap) var(--lr-page-gutter);
+  overflow: hidden;
+  background-color: var(--lr-material-regular);
+  border: 1px solid var(--lr-hairline);
+  border-radius: var(--lr-radius-lg);
+  box-shadow: var(--lr-shadow-sm);
+  -webkit-backdrop-filter: saturate(var(--lr-material-regular-saturate))
+    blur(var(--lr-material-regular-blur));
+  backdrop-filter: saturate(var(--lr-material-regular-saturate))
+    blur(var(--lr-material-regular-blur));
+  transition: width var(--lr-duration-slow) var(--lr-ease);
+}
+
+.layout-menu-scroll {
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------- 菜单 ---------- */
+:deep(.el-menu) {
+  padding: 10px;
+  background: transparent;
+  border-right: none;
+}
+
+:deep(.el-menu-item),
+:deep(.el-sub-menu__title) {
+  height: 48px;
+  margin-bottom: var(--lr-space-1);
+  font-size: var(--lr-font);
+  color: var(--lr-text-secondary);
+  border-radius: var(--lr-radius-md);
+  transition: background-color var(--lr-duration) var(--lr-ease),
+    color var(--lr-duration) var(--lr-ease),
+    box-shadow var(--lr-duration) var(--lr-ease);
+
+  &:hover {
+    color: var(--lr-primary);
+    background-color: var(--lr-primary-soft);
+  }
+}
+
+/* 分组标题做成小号标签 */
+:deep(.el-sub-menu__title) {
+  font-size: var(--lr-font-sm);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+:deep(.el-sub-menu .el-menu-item) {
+  height: 44px;
+  padding-left: 44px !important;
+  font-size: var(--lr-font);
+}
+
+/* 选中项：整块填充赭色 + 白字 + 暖阴影 */
+:deep(.el-menu-item.is-active) {
+  font-weight: 500;
+  color: #fff !important;
+  background-color: var(--lr-primary);
+  box-shadow: var(--lr-shadow-primary);
+}
+
+:deep(.el-menu--inline) {
+  background: transparent;
+}
+
+/* 折叠态 */
+:deep(.el-menu--collapse) {
+  width: 100%;
+  padding: 10px 8px;
+}
+
+:deep(.el-menu--collapse .el-menu-item),
+:deep(.el-menu--collapse .el-sub-menu__title) {
+  justify-content: center;
+  height: 44px;
+  margin-bottom: var(--lr-space-1);
+  padding: 0 !important;
+}
+
+/* ---------- 底部用户块 ---------- */
+.layout-user-card {
+  flex-shrink: 0;
+  padding: 10px;
+  border-top: 1px solid var(--lr-hairline);
 }
 
 .layout-user {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
-  color: var(--lr-text-regular);
+  padding: 8px 10px;
   cursor: pointer;
+  border-radius: var(--lr-radius-md);
   outline: none;
+  transition: background-color var(--lr-duration) var(--lr-ease);
+
+  &:hover {
+    background-color: var(--lr-bg-hover);
+  }
+
+  &.is-collapsed {
+    justify-content: center;
+    padding: 6px;
+  }
 }
 
 .layout-avatar {
-  background-color: var(--lr-primary);
-  font-size: 13px;
+  flex-shrink: 0;
+  font-size: var(--lr-font-sm);
+  font-weight: 500;
+  background: var(--lr-gradient-primary);
+}
+
+.layout-user-meta {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
 }
 
 .layout-user-name {
-  font-size: 14px;
+  overflow: hidden;
+  font-size: var(--lr-font-sm);
+  font-weight: 600;
+  color: var(--lr-text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* ---------- 内容区 ---------- */
-.layout-main {
-  padding: 0;
-  overflow-y: auto;
-  background-color: var(--lr-bg-page);
+.layout-user-role {
+  overflow: hidden;
+  font-size: var(--lr-font-xs);
+  color: var(--lr-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  /* 全屏式页面（聊天）：外层不滚动、不设背景，交给页面自己管理 */
+.layout-user-caret {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--lr-text-placeholder);
+}
+
+/* ==================== 内容区 ==================== */
+/* padding-top 让出悬浮顶栏；背景透明，露出 body 上的页面光晕。
+   注意：滚动容器的 padding 属于滚动可视区，所以内容向上滚动时
+   会进入这段 padding 区域、从磨砂顶栏下方穿过。 */
+.layout-main {
+  padding: var(--lr-header-height) 0 0;
+  overflow-y: auto;
+  background-color: transparent;
+
+  /* 全屏式页面（聊天）：外层不滚动，交给页面自己管 */
   &.is-full-height {
+    padding-top: var(--lr-header-height);
     overflow: hidden;
-    background: #fff;
   }
 }
 
@@ -401,5 +582,15 @@ onBeforeUnmount(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* ==================== 磨砂降级 ==================== */
+@supports not (backdrop-filter: blur(1px)) {
+  .layout-header,
+  .layout-aside {
+    background-color: var(--lr-material-fallback);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
 }
 </style>

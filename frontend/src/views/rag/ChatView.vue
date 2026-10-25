@@ -748,7 +748,7 @@ onBeforeUnmount(() => {
   display: flex;
   height: 100%;
   overflow: hidden;
-  background: #fff;
+  background: var(--lr-bg-card);
 }
 
 /* ==================== 会话列表 ==================== */
@@ -757,7 +757,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   width: 240px;
   border-right: 1px solid var(--lr-border);
-  background: #fafbfc;
+  background: var(--lr-bg-page);
   transition: width 0.2s;
 
   &.collapsed {
@@ -800,7 +800,7 @@ onBeforeUnmount(() => {
   border-radius: var(--lr-radius-sm);
 
   &:hover {
-    background: #eef2f7;
+    background: var(--lr-bg-hover);
 
     .session-del {
       opacity: 1;
@@ -808,7 +808,7 @@ onBeforeUnmount(() => {
   }
 
   &.active {
-    background: #e8f1fe;
+    background: var(--lr-primary-soft);
   }
 }
 
@@ -908,15 +908,15 @@ onBeforeUnmount(() => {
   font-size: 13px;
   color: var(--lr-text-regular);
   cursor: pointer;
-  background: #f5f7fa;
-  border: 1px solid var(--lr-border);
-  border-radius: 18px;
-  transition: all 0.15s;
+  background: var(--lr-bg-page);
+  border: 1px solid var(--lr-border-light);
+  border-radius: var(--lr-radius-pill);
+  transition: all var(--lr-duration) var(--lr-ease);
 
   &:hover {
     color: var(--lr-primary);
-    background: #ecf5ff;
-    border-color: var(--lr-primary);
+    background: var(--lr-primary-soft);
+    border-color: var(--lr-primary-soft-2);
   }
 }
 
@@ -947,7 +947,7 @@ onBeforeUnmount(() => {
   }
 
   &.assistant {
-    background: linear-gradient(135deg, #67c23a, #409eff);
+    background: var(--lr-gradient-primary);
   }
 }
 
@@ -971,8 +971,8 @@ onBeforeUnmount(() => {
 }
 
 .ai-bubble {
-  background: #f5f7fa;
-  border: 1px solid #ebeef5;
+  background: var(--lr-bg-page);
+  border: 1px solid var(--lr-border-light);
 }
 
 /* ---------- markdown 渲染样式（v-html 生成，不可 scoped 到子元素之外，用 :deep） ---------- */
@@ -1006,8 +1006,8 @@ onBeforeUnmount(() => {
     text-align: center;
     cursor: pointer;
     user-select: none;
-    background: #ecf5ff;
-    border: 1px solid #b3d8ff;
+    background: var(--lr-primary-soft);
+    border: 1px solid var(--lr-primary-soft-2);
     border-radius: 4px;
     transition: all 0.15s;
 
@@ -1026,8 +1026,8 @@ onBeforeUnmount(() => {
   padding: 8px 12px;
   font-size: 13px;
   color: var(--lr-text-secondary);
-  background: #f5f7fa;
-  border: 1px solid #ebeef5;
+  background: var(--lr-bg-page);
+  border: 1px solid var(--lr-border-light);
   border-radius: var(--lr-radius);
 }
 
@@ -1094,7 +1094,7 @@ onBeforeUnmount(() => {
 .cite-block {
   margin-top: 8px;
   overflow: hidden;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--lr-border-light);
   border-radius: var(--lr-radius);
 }
 
@@ -1105,11 +1105,11 @@ onBeforeUnmount(() => {
   padding: 6px 10px;
   cursor: pointer;
   user-select: none;
-  background: #fafbfc;
+  background: var(--lr-bg-page);
   transition: background 0.15s;
 
   &:hover {
-    background: #f2f4f7;
+    background: var(--lr-bg-hover);
   }
 }
 
@@ -1142,7 +1142,7 @@ onBeforeUnmount(() => {
 }
 
 .cite-list {
-  border-top: 1px solid #f2f3f5;
+  border-top: 1px solid var(--lr-border-light);
 }
 
 .cite-row {
@@ -1151,7 +1151,7 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 6px 10px;
   font-size: 12px;
-  border-bottom: 1px solid #f7f8fa;
+  border-bottom: 1px solid var(--lr-border-light);
   transition: background 0.25s;
 
   &:last-child {
@@ -1159,7 +1159,7 @@ onBeforeUnmount(() => {
   }
 
   &.highlight {
-    background: #fdf6ec;
+    background: var(--lr-warning-soft);
   }
 }
 

@@ -234,6 +234,6 @@ onMounted(async () => {
 }
 
 :deep(.is-current-role) {
-  background-color: var(--lr-primary-light, #ecf5ff);
+  background-color: var(--lr-primary-soft);
 }
 </style>

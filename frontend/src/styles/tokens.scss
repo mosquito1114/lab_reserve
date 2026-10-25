@@ -1,0 +1,129 @@
+/**
+ * 设计令牌（Design Tokens）
+ *
+ * 全站唯一的颜色 / 材质 / 间距 / 圆角 / 阴影来源。
+ *
+ * 取值策略：
+ *   - 配色：暖赭棕主色 + 暖中性底（参照 axonhub 的 .claude 浅色方案）
+ *   - 材质：半透明 + 磨砂 + 发丝描边 + 软暖阴影（参照 Apple 的视觉语言）
+ *
+ * 约束：组件里禁止写死色值，一律引用这里的 CSS 变量。
+ */
+
+:root {
+  /* ==================== 品牌色 ==================== */
+  --lr-primary: #b05d2e;
+  --lr-primary-hover: #c26b36;
+  --lr-primary-active: #8d4a25;
+  --lr-primary-soft: #f7efea;
+  --lr-primary-soft-2: #efdfd5;
+  --lr-primary-ring: rgb(176 93 46 / 12%);
+  --lr-gradient-primary: linear-gradient(135deg, #b05d2e 0%, #d18a4e 100%);
+
+  /* ==================== 语义色 ==================== */
+  --lr-success: #2d6a4f;
+  --lr-success-soft: #eaf0ed;
+  --lr-warning: #c98a3e;
+  --lr-warning-soft: #faf3ec;
+  --lr-danger: #ef4444;
+  --lr-danger-soft: #fdecec;
+  --lr-info: #8a8078;
+  --lr-info-soft: #f3f2f2;
+
+  /* ==================== 中性色（暖） ==================== */
+  --lr-text-primary: #292524;
+  --lr-text-regular: #4a4541;
+  --lr-text-secondary: #5c564f;
+  --lr-text-placeholder: #a8a29c;
+
+  --lr-border: #d8d4cf;
+  --lr-border-light: #e3dfd9;
+  --lr-border-dark: #c9c3bc;
+  --lr-hairline: rgb(41 37 36 / 6%);
+
+  /* 卡片只比页面底亮几个色阶，靠阴影与描边分离 */
+  --lr-bg-page: #f0f0ef;
+  --lr-bg-card: #f5f5f4;
+  --lr-bg-raised: #fafaf9;
+  --lr-bg-hover: #eae8e5;
+  --lr-bg-muted: #e0ddd9;
+  --lr-bg-accent: #ebe3db;
+
+  /* ==================== 材质：磨砂四档 ==================== */
+  /* 薄：顶栏（滚动内容从下面透出） */
+  --lr-material-thin: rgb(250 250 249 / 60%);
+  --lr-material-thin-blur: 20px;
+  --lr-material-thin-saturate: 180%;
+
+  /* 标准：浮动侧栏 */
+  --lr-material-regular: rgb(252 251 250 / 72%);
+  --lr-material-regular-blur: 20px;
+  --lr-material-regular-saturate: 160%;
+
+  /* 厚：弹窗 / 抽屉 */
+  --lr-material-thick: rgb(250 250 249 / 86%);
+  --lr-material-thick-blur: 24px;
+  --lr-material-thick-saturate: 140%;
+
+  /* 遮罩：弹窗背景 */
+  --lr-material-scrim: rgb(41 37 36 / 32%);
+  --lr-material-scrim-blur: 12px;
+  --lr-material-scrim-saturate: 120%;
+
+  /* 不支持 backdrop-filter 时的降级底色 */
+  --lr-material-fallback: #f4f3f1;
+
+  /* ==================== 间距 ==================== */
+  --lr-space-1: 4px;
+  --lr-space-2: 8px;
+  --lr-space-3: 12px;
+  --lr-space-4: 16px;
+  --lr-space-5: 20px;
+  --lr-space-6: 24px;
+  --lr-space-8: 32px;
+  --lr-space-10: 40px;
+
+  /* ==================== 圆角（容器越大，圆角越大） ==================== */
+  --lr-radius-xs: 6px;
+  --lr-radius-sm: 8px;
+  --lr-radius-control: 10px;
+  --lr-radius: 12px;
+  --lr-radius-md: 16px;
+  --lr-radius-lg: 20px;
+  --lr-radius-xl: 24px;
+  --lr-radius-pill: 999px;
+
+  /* ==================== 阴影（暖色，不用灰黑） ==================== */
+  --lr-shadow-xs: 0 1px 2px rgb(176 93 46 / 6%);
+  --lr-shadow-sm: 0 2px 8px -2px rgb(176 93 46 / 10%);
+  --lr-shadow-md: 0 8px 20px -6px rgb(176 93 46 / 14%);
+  --lr-shadow-lg: 0 24px 48px -16px rgb(176 93 46 / 22%);
+  --lr-shadow-primary: 0 4px 12px -4px rgb(176 93 46 / 40%);
+  --lr-shadow-inset-hairline: inset 0 -1px 0 rgb(41 37 36 / 6%);
+
+  /* ==================== 字体 ==================== */
+  --lr-font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  --lr-font-xs: 12px;
+  --lr-font-sm: 13px;
+  --lr-font: 14px;
+  --lr-font-lg: 16px;
+  --lr-font-xl: 20px;
+  --lr-font-2xl: 26px;
+  --lr-font-display: 40px;
+
+  /* ==================== 布局 ==================== */
+  --lr-header-height: 64px;
+  --lr-sidebar-width: 232px;
+  --lr-sidebar-width-collapsed: 72px;
+  --lr-content-max: 1440px;
+  --lr-page-gutter: 24px;
+  --lr-card-gap: 20px;
+  --lr-sidebar-gap: 12px;
+
+  /* ==================== 动效 ==================== */
+  --lr-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --lr-duration-fast: 160ms;
+  --lr-duration: 200ms;
+  --lr-duration-slow: 300ms;
+}
