@@ -1,5 +1,6 @@
 package com.labreserve.rag.service;
 
+import com.labreserve.rag.model.vo.LlmUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,10 +26,10 @@ import org.springframework.stereotype.Service;
 @Service
 public class QueryRewriter {
 
-    /** 重写结果 */
-    public record Rewritten(String question, boolean rewritten) {
+    /** 重写结果（含本次调用的 token 用量，R6） */
+    public record Rewritten(String question, boolean rewritten, LlmUsage usage) {
         public static Rewritten passthrough(String q) {
-            return new Rewritten(q, false);
+            return new Rewritten(q, false, LlmUsage.EMPTY);
         }
     }
 
@@ -61,20 +62,23 @@ public class QueryRewriter {
                     %s
                     """.formatted(lastTurnDigest, rawInput);
 
-            String out = cheapLlm.prompt()
+            // 用 call() 而不是 call().content()：后者丢掉 metadata 里的 usage
+            var response = cheapLlm.prompt()
                     .user(prompt)
                     .call()
-                    .content();
+                    .chatResponse();
+            String out = response == null ? null : response.getResult().getOutput().getText();
+            LlmUsage usage = LlmUsage.from(response);
 
             if (out == null || out.isBlank()) {
-                return Rewritten.passthrough(rawInput);
+                return new Rewritten(rawInput, false, usage);
             }
             String cleaned = out.trim().replaceAll("^[\"'“”]+|[\"'“”]+$", "");
             if (cleaned.isEmpty()) {
-                return Rewritten.passthrough(rawInput);
+                return new Rewritten(rawInput, false, usage);
             }
             log.debug("[RAG][REWRITE] '{}' → '{}'", rawInput, cleaned);
-            return new Rewritten(cleaned, !cleaned.equals(rawInput));
+            return new Rewritten(cleaned, !cleaned.equals(rawInput), usage);
 
         } catch (Exception e) {
             // LLM 不可用 → 透传

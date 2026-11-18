@@ -5,6 +5,7 @@ import com.labreserve.rag.mapper.RagMessageMapper;
 import com.labreserve.rag.mapper.RagSessionMapper;
 import com.labreserve.rag.model.entity.RagMessage;
 import com.labreserve.rag.model.entity.RagSession;
+import com.labreserve.rag.model.vo.LlmUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,11 +64,11 @@ public class SessionSummarizer {
      * 尝试压缩会话早期对话。**永不抛异常** —— 失败只记日志。
      *
      * @param session 当前会话（需带 id / summary / summaryUpTo）
-     * @return 是否发生了压缩
+     * @return 本次压缩消耗的 token（未压缩或失败时为 {@link LlmUsage#EMPTY}）
      */
-    public boolean maybeSummarize(RagSession session) {
+    public LlmUsage maybeSummarize(RagSession session) {
         if (session == null || session.getId() == null) {
-            return false;
+            return LlmUsage.EMPTY;
         }
         try {
             int window = Math.max(1, props.getChat().getHistoryWindow());
@@ -77,7 +78,7 @@ public class SessionSummarizer {
             // 取全量消息（上限 MAX_COMPRESS_MESSAGES * 2，够用且不爆）
             List<RagMessage> fetched = messageMapper.listRecent(session.getId(), MAX_COMPRESS_MESSAGES * 2);
             if (fetched == null || fetched.isEmpty()) {
-                return false;
+                return LlmUsage.EMPTY;
             }
             Collections.reverse(fetched);   // 时间正序
 
@@ -93,20 +94,21 @@ public class SessionSummarizer {
 
             // 最近 keepRecent 条留在 prompt 里，不压缩
             if (pending.size() <= keepRecent) {
-                return false;
+                return LlmUsage.EMPTY;
             }
             List<RagMessage> early = pending.subList(0, pending.size() - keepRecent);
             if (early.size() < trigger) {
-                return false;
+                return LlmUsage.EMPTY;
             }
             if (early.size() > MAX_COMPRESS_MESSAGES) {
                 early = early.subList(early.size() - MAX_COMPRESS_MESSAGES, early.size());
             }
 
             String oldSummary = session.getSummary();
-            String newSummary = compress(oldSummary, early);
+            SummaryResult result = compress(oldSummary, early);
+            String newSummary = result.text();
             if (newSummary == null || newSummary.isBlank()) {
-                return false;
+                return result.usage();
             }
             if (newSummary.length() > MAX_SUMMARY_CHARS) {
                 newSummary = newSummary.substring(0, MAX_SUMMARY_CHARS) + "…";
@@ -117,13 +119,17 @@ public class SessionSummarizer {
             session.setSummary(newSummary);
             session.setSummaryUpTo(upto);
 
-            log.info("[RAG][SUMMARY] sessionId={} 压缩早期 {} 条 → 摘要 {} 字, summaryUpTo={}",
-                    session.getId(), early.size(), newSummary.length(), upto);
-            return true;
+            log.info("[RAG][SUMMARY] sessionId={} 压缩早期 {} 条 → 摘要 {} 字, summaryUpTo={}, tokens={}",
+                    session.getId(), early.size(), newSummary.length(), upto, result.usage().totalTokens());
+            return result.usage();
         } catch (Exception e) {
             log.warn("[RAG][SUMMARY] 压缩失败（不影响主链路）: {}", e.getMessage());
-            return false;
+            return LlmUsage.EMPTY;
         }
+    }
+
+    /** 压缩结果：摘要正文 + 本次 LLM 调用的 token 用量 */
+    private record SummaryResult(String text, LlmUsage usage) {
     }
 
     /**
@@ -131,9 +137,9 @@ public class SessionSummarizer {
      *
      * @param oldSummary 已有摘要（可空）
      * @param early     待压缩的早期消息
-     * @return 摘要正文；失败返回 null
+     * @return 摘要正文 + token 用量；失败时 text 为 null
      */
-    private String compress(String oldSummary, List<RagMessage> early) {
+    private SummaryResult compress(String oldSummary, List<RagMessage> early) {
         StringBuilder convo = new StringBuilder();
         for (RagMessage m : early) {
             String role = "USER".equals(m.getRole()) ? "用户" : "助手";
@@ -163,21 +169,24 @@ public class SessionSummarizer {
                 convo);
 
         try {
-            String out = cheapLlm.prompt()
+            // chatResponse() 而不是 content()：后者丢掉 metadata 里的 usage
+            var response = cheapLlm.prompt()
                     .user(prompt)
                     .call()
-                    .content();
+                    .chatResponse();
+            LlmUsage usage = LlmUsage.from(response);
+            String out = response == null ? null : response.getResult().getOutput().getText();
             if (out == null || out.isBlank()) {
-                return null;
+                return new SummaryResult(null, usage);
             }
             String cleaned = out.trim()
                     .replaceAll("^```[a-zA-Z]*\\s*", "")
                     .replaceAll("```$", "")
                     .trim();
-            return cleaned.isEmpty() ? null : cleaned;
+            return new SummaryResult(cleaned.isEmpty() ? null : cleaned, usage);
         } catch (Exception e) {
             log.warn("[RAG][SUMMARY] LLM 压缩失败: {}", e.getMessage());
-            return null;
+            return new SummaryResult(null, LlmUsage.EMPTY);
         }
     }
 }

@@ -9,6 +9,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.metadata.ChatResponseMetadata;
+import org.springframework.ai.chat.metadata.DefaultUsage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.model.Generation;
@@ -98,7 +100,11 @@ public class DashScopeChatModel implements ChatModel {
             if (content == null || content.isBlank()) {
                 throw new BizException(500, "DashScope chat 响应 content 为空");
             }
-            return new ChatResponse(List.of(new Generation(new AssistantMessage(content))));
+            // 带上 usage（真实 token 统计，R6）
+            JsonNode usageNode = mapper.readTree(resp.body()).path("usage");
+            return new ChatResponse(
+                    List.of(new Generation(new AssistantMessage(content))),
+                    buildMetadata(usageNode));
 
         } catch (BizException be) {
             throw be;
@@ -151,12 +157,19 @@ public class DashScopeChatModel implements ChatModel {
                         .filter(payload -> !payload.isEmpty() && !"[DONE]".equals(payload))
                         .<ChatResponse>handle((payload, sink) -> {
                             try {
-                                String content = mapper.readTree(payload)
-                                        .path("choices").path(0)
+                                JsonNode node = mapper.readTree(payload);
+                                String content = node.path("choices").path(0)
                                         .path("delta").path("content").asText(null);
+                                // usage 通常在最后一个 chunk（choices 为空数组）里
+                                JsonNode usageNode = node.path("usage");
+                                boolean hasUsage = usageNode.isObject() && usageNode.size() > 0;
+
                                 if (content != null && !content.isEmpty()) {
                                     sink.next(new ChatResponse(
                                             List.of(new Generation(new AssistantMessage(content)))));
+                                } else if (hasUsage) {
+                                    // 只带 usage、不带正文的 chunk —— 上层据此取 token 统计
+                                    sink.next(new ChatResponse(List.of(), buildMetadata(usageNode)));
                                 }
                             } catch (Exception e) {
                                 // 单个 chunk 解析失败不终止整条流
@@ -208,6 +221,9 @@ public class DashScopeChatModel implements ChatModel {
             root.put("max_tokens", props.getLlm().getMaxTokens());
             if (stream) {
                 root.put("stream", true);
+                // 请求流式也返回 usage（否则 token 统计永远拿不到）
+                var so = root.putObject("stream_options");
+                so.put("include_usage", true);
             }
 
             var arr = root.putArray("messages");
@@ -235,6 +251,46 @@ public class DashScopeChatModel implements ChatModel {
         } catch (Exception e) {
             throw new BizException(500, "组装 chat 请求失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 把响应里的 {@code usage} 节点转成 Spring AI 的 {@link ChatResponseMetadata}。
+     *
+     * <p><b>兼容两种字段方言</b>（OpenAI 兼容 vs DashScope 原生）：
+     * <ul>
+     *   <li>OpenAI 兼容：{@code prompt_tokens} / {@code completion_tokens} / {@code total_tokens}</li>
+     *   <li>DashScope 原生：{@code input_tokens} / {@code output_tokens} / {@code total_tokens}</li>
+     * </ul>
+     *
+     * <p>取不到就返回空 metadata（上层据此降级为本地估算）。
+     */
+    private ChatResponseMetadata buildMetadata(JsonNode usageNode) {
+        if (usageNode == null || !usageNode.isObject() || usageNode.size() == 0) {
+            return ChatResponseMetadata.builder().build();
+        }
+        Integer prompt = firstInt(usageNode, "prompt_tokens", "input_tokens");
+        Integer completion = firstInt(usageNode, "completion_tokens", "output_tokens");
+        Integer total = firstInt(usageNode, "total_tokens");
+        if (prompt == null && completion == null && total == null) {
+            return ChatResponseMetadata.builder().build();
+        }
+        int p = prompt == null ? 0 : prompt;
+        int c = completion == null ? 0 : completion;
+        int t = total == null ? (p + c) : total;
+        return ChatResponseMetadata.builder()
+                .usage(new DefaultUsage(p, c, t))
+                .build();
+    }
+
+    /** 取第一个存在的整数型字段 */
+    private static Integer firstInt(JsonNode node, String... names) {
+        for (String n : names) {
+            JsonNode v = node.path(n);
+            if (v.isNumber()) {
+                return v.asInt();
+            }
+        }
+        return null;
     }
 
     private String base() {

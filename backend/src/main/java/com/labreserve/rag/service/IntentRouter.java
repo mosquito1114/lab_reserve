@@ -3,6 +3,7 @@ package com.labreserve.rag.service;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.labreserve.rag.model.vo.Intent;
+import com.labreserve.rag.model.vo.LlmUsage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +32,15 @@ import java.util.regex.Pattern;
 @Slf4j
 @Service
 public class IntentRouter {
+
+    /**
+     * 意图判定结果 + 本次 LLM 调用的 token 用量（R6）。
+     *
+     * @param intent 4 维意图
+     * @param usage  分类消耗的 token（快路径命中时为 {@link LlmUsage#EMPTY}）
+     */
+    public record IntentDecision(Intent intent, LlmUsage usage) {
+    }
 
     @Autowired
     private ChatClient cheapLlm;
@@ -150,12 +160,13 @@ public class IntentRouter {
      *                         「那它呢」这类纯指代单看是 docs 信号很弱，
      *                         但结合上一轮问句就能知道它延续的是什么话题。
      */
-    public Intent route(String question, String userQuestionDigest) {
+    public IntentDecision route(String question, String userQuestionDigest) {
         // ① 快路径（只看当前问句，不看历史 —— 历史里的注入内容不应触发 unsafe）
         Intent fast = fastPath(question);
         if (fast != null) {
             log.debug("[RAG][INTENT] 快路径命中: {} → {}", abbreviate(question), fast.dominant());
-            return fast;
+            // 快路径没调 LLM，无 token 消耗
+            return new IntentDecision(fast, LlmUsage.EMPTY);
         }
 
         // ② LLM 结构化兜底
@@ -191,19 +202,21 @@ public class IntentRouter {
                     问题：%s
                     """.formatted(historySection, question);
 
-            String content = cheapLlm.prompt()
+            var response = cheapLlm.prompt()
                     .user(prompt)
                     .call()
-                    .content();
+                    .chatResponse();
+            LlmUsage usage = LlmUsage.from(response);
+            String content = response == null ? null : response.getResult().getOutput().getText();
             if (content == null || content.isBlank()) {
                 log.warn("[RAG][INTENT] LLM 返回空,落到 undetermined");
-                return Intent.undetermined();
+                return new IntentDecision(Intent.undetermined(), usage);
             }
-            return parseIntent(content);
+            return new IntentDecision(parseIntent(content), usage);
         } catch (Exception e) {
             // LLM 不可用 → 落到 undetermined（优先去检索，而不是直接拒）
             log.warn("[RAG][INTENT] LLM 分类失败,落到 undetermined: {}", e.getMessage());
-            return Intent.undetermined();
+            return new IntentDecision(Intent.undetermined(), LlmUsage.EMPTY);
         }
     }
 

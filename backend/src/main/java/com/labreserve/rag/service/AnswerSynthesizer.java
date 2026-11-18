@@ -1,6 +1,7 @@
 package com.labreserve.rag.service;
 
 import com.labreserve.rag.model.vo.CitationVO;
+import org.springframework.ai.chat.model.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.SystemMessage;
@@ -76,8 +77,8 @@ public class AnswerSynthesizer {
      * @param historyText 对话历史（摘要 + 最近对话）；<b>空串 = 无历史</b>，此时不渲染历史段
      * @return 正文 chunk 流（增量文本）
      */
-    public Flux<String> stream(String question, List<CitationVO> citations,
-                               List<String> evidenceTexts, String historyText) {
+    public Flux<ChatResponse> stream(String question, List<CitationVO> citations,
+                                     List<String> evidenceTexts, String historyText) {
         String evidence = renderEvidence(citations, evidenceTexts);
 
         // 历史段：为空时整段不渲染，保证单轮 prompt 与无记忆版逐字一致
@@ -108,10 +109,12 @@ public class AnswerSynthesizer {
                 abbreviate(question), citations.size(),
                 historyText == null ? 0 : historyText.length());
 
+        // 用 chatResponse() 而不是 content()：
+        // content() 只给字符串，丢掉 ChatResponse.metadata 里的 usage —— token 统计就永远拿不到。
         return primaryLlm.prompt()
                 .messages(prompt.getInstructions())
                 .stream()
-                .content();
+                .chatResponse();
     }
 
     /**
@@ -122,7 +125,7 @@ public class AnswerSynthesizer {
      *
      * <p>历史为空时返回空流（调用方应提前判空）。
      */
-    public Flux<String> recallFromHistory(String question, String historyText) {
+    public Flux<ChatResponse> recallFromHistory(String question, String historyText) {
         if (historyText == null || historyText.isBlank()) {
             return Flux.empty();
         }
@@ -150,7 +153,7 @@ public class AnswerSynthesizer {
         return primaryLlm.prompt()
                 .messages(prompt.getInstructions())
                 .stream()
-                .content();
+                .chatResponse();
     }
 
     /**

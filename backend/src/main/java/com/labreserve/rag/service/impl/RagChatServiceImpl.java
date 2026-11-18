@@ -14,6 +14,7 @@ import com.labreserve.rag.model.entity.RagSession;
 import com.labreserve.rag.model.entity.RagUsageStats;
 import com.labreserve.rag.model.vo.CitationVO;
 import com.labreserve.rag.model.vo.Intent;
+import com.labreserve.rag.model.vo.LlmUsage;
 import com.labreserve.rag.model.vo.RagStreamItem;
 import com.labreserve.rag.service.AnswerSynthesizer;
 import com.labreserve.rag.service.ContextLoaderService;
@@ -29,6 +30,7 @@ import com.labreserve.util.SecurityUtils;
 import com.labreserve.util.SensitiveUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -148,11 +150,15 @@ public class RagChatServiceImpl implements RagChatService {
 
             // ============ Step 2 问题重写 ============
             var rewritten = rewriter.rewrite(dto.getMessage(), context.lastTurnDigest());
+            // 重写器的 token 消耗计入本次问答总量（R6）
+            usedTokens.addAndGet(rewritten.usage().totalTokens());
 
             // ============ Step 3 意图 ============
             // 带上历史里用户的问句：纯指代问句（「那它呢」）单看信号弱，
             // 结合上一轮才知道延续的是什么话题（R6）。
-            Intent intent = resolveIntent(rewritten.question(), dto.getMessage(), context);
+            var decision = resolveIntent(rewritten.question(), dto.getMessage(), context);
+            Intent intent = decision.intent();
+            usedTokens.addAndGet(decision.usage().totalTokens());
 
             // ---------- 落 USER 消息 ----------
             RagMessage userMsg = new RagMessage();
@@ -224,17 +230,17 @@ public class RagChatServiceImpl implements RagChatService {
      * @param rawInput          用户原始输入（recall 检测用原始问法更准）
      * @param context           会话上下文
      */
-    private Intent resolveIntent(String rewrittenQuestion, String rawInput,
-                                 ContextLoaderService.LoadedContext context) {
+    private IntentRouter.IntentDecision resolveIntent(String rewrittenQuestion, String rawInput,
+                                                     ContextLoaderService.LoadedContext context) {
         // ① unsafe 优先
         if (intentRouter.isUnsafe(rewrittenQuestion) || intentRouter.isUnsafe(rawInput)) {
-            return Intent.unsafe();
+            return new IntentRouter.IntentDecision(Intent.unsafe(), LlmUsage.EMPTY);
         }
         // ② 上下文自省：原始问法或重写问句任一命中即可
         String historyText = context == null ? "" : context.historyText();
         if (!historyText.isBlank()
                 && (recallDetector.isRecall(rawInput) || recallDetector.isRecall(rewrittenQuestion))) {
-            return Intent.docs();
+            return new IntentRouter.IntentDecision(Intent.docs(), LlmUsage.EMPTY);
         }
         // ③ 常规意图分类（带历史，供 LLM 判定语境）
         return intentRouter.route(rewrittenQuestion, context == null ? "" : context.userQuestionDigest());
@@ -247,7 +253,7 @@ public class RagChatServiceImpl implements RagChatService {
                                              long startMs, CallerInfo caller, Intent intent,
                                              String question, String historyText,
                                              AtomicInteger usedTokens, AtomicBoolean degraded) {
-        Flux<String> textFlux;
+        Flux<ChatResponse> textFlux;
         try {
             textFlux = synthesizer.recallFromHistory(question, historyText)
                     .timeout(java.time.Duration.ofSeconds(60));
@@ -262,12 +268,20 @@ public class RagChatServiceImpl implements RagChatService {
         AtomicBoolean persisted = new AtomicBoolean(false);
         final Long sid = session.getId();
 
-        Flux<String> safeFlux = streamingSanitizer.sanitize(textFlux);
+        // ChatResponse → 正文；顺带把 usage 累加（真实 token 统计，R6）
+        TokenCounter counter = new TokenCounter();
+        // prompt 侧本地估算（provider 不返回 usage 时兜底）
+        counter.addPromptEstimate(LlmUsage.estimate(question) + LlmUsage.estimate(historyText));
 
-        Flux<RagStreamItem> body = safeFlux.map(chunk -> {
-            buffer.append(chunk);
-            return new RagStreamItem(RagStreamItem.Kind.CHUNK, chunk, null, null, null, null, null, null, sid);
-        });
+        Flux<RagStreamItem> body = textFlux
+                .doOnNext(resp -> accumulateUsage(resp, counter))
+                .map(this::extractText)
+                .filter(t -> !t.isEmpty())
+                .transform(flux -> streamingSanitizer.sanitize(flux))
+                .map(chunk -> {
+                    buffer.append(chunk);
+                    return new RagStreamItem(RagStreamItem.Kind.CHUNK, chunk, null, null, null, null, null, null, sid);
+                });
 
         Flux<RagStreamItem> tail = Flux.defer(() -> {
             if (!persisted.compareAndSet(false, true)) {
@@ -275,9 +289,11 @@ public class RagChatServiceImpl implements RagChatService {
             }
             String answer = buffer.toString();
             int cost = (int) (System.currentTimeMillis() - startMs);
+            // 结算本环节 token：优先真实 usage，否则本地估算
+            usedTokens.addAndGet(counter.resolve(answer));
             // 无检索 → 无引用
             Long assistantMsgId = persistAssistant(session, answer, List.of(), traceId, cost, caller, intent,
-                    degraded.get());
+                    degraded.get(), usedTokens);
 
             RagStreamItem citationItem = new RagStreamItem(
                     RagStreamItem.Kind.CITATION, null, List.of(), null, null, null, null, null, sid);
@@ -337,7 +353,7 @@ public class RagChatServiceImpl implements RagChatService {
         }
 
         // ---- Step 5 流式合成 ----
-        Flux<String> textFlux;
+        Flux<ChatResponse> textFlux;
         try {
             textFlux = synthesizer.stream(rewrittenQuestion, citations, evidenceTexts, historyText)
                     .timeout(java.time.Duration.ofSeconds(60));
@@ -355,14 +371,23 @@ public class RagChatServiceImpl implements RagChatService {
         //   必须在"吐给客户端"这一侧生效，而不是只对落库那份脱敏——
         //   否则用户实时看到的仍是未脱敏文本（R5 核查发现的原实现缺陷）。
         //   StreamingSanitizer 用尾部保留策略处理"手机号被 chunk 切断"的情况。
-        Flux<String> safeFlux = streamingSanitizer.sanitize(textFlux);
-
         // 正文 chunk 透传 + 累积
         final Long sid = session.getId();
-        Flux<RagStreamItem> body = safeFlux.map(chunk -> {
-            buffer.append(chunk);
-            return new RagStreamItem(RagStreamItem.Kind.CHUNK, chunk, null, null, null, null, null, null, sid);
-        });
+        // ChatResponse → 正文；顺带把 usage 累加（真实 token 统计，R6）
+        TokenCounter counter = new TokenCounter();
+        counter.addPromptEstimate(LlmUsage.estimate(rewrittenQuestion)
+                + estimateEvidence(citations, evidenceTexts)
+                + LlmUsage.estimate(historyText));
+
+        Flux<RagStreamItem> body = textFlux
+                .doOnNext(resp -> accumulateUsage(resp, counter))
+                .map(this::extractText)
+                .filter(t -> !t.isEmpty())
+                .transform(flux -> streamingSanitizer.sanitize(flux))
+                .map(chunk -> {
+                    buffer.append(chunk);
+                    return new RagStreamItem(RagStreamItem.Kind.CHUNK, chunk, null, null, null, null, null, null, sid);
+                });
 
         // 流结束后发 citation + message + done（只执行一次）
         Flux<RagStreamItem> tail = Flux.defer(() -> {
@@ -371,8 +396,10 @@ public class RagChatServiceImpl implements RagChatService {
             }
             String answer = buffer.toString();
             int cost = (int) (System.currentTimeMillis() - startMs);
+            // 结算本环节 token：优先真实 usage，否则本地估算
+            usedTokens.addAndGet(counter.resolve(answer));
             Long assistantMsgId = persistAssistant(session, answer, citations, traceId, cost, caller, intent,
-                    degraded.get());
+                    degraded.get(), usedTokens);
 
             RagStreamItem citationItem = new RagStreamItem(
                     RagStreamItem.Kind.CITATION, null, citations, null, null, null, null, null, sid);
@@ -389,6 +416,96 @@ public class RagChatServiceImpl implements RagChatService {
     }
 
     // ============================================================
+    // Token 统计（R6）
+    // ============================================================
+
+    /**
+     * 一次答案合成环节的 token 计数。
+     *
+     * <p>两套口径：
+     * <ul>
+     *   <li>{@code provider} —— provider 返回的真实 usage（DashScope 会返回）</li>
+     *   <li>{@code promptEstimate} —— 本地估算的 prompt 侧 token</li>
+     * </ul>
+     *
+     * <p>有些 OpenAI 兼容端点不返回 usage，此时退化为本地估算，
+     * 保证 {@code tb_rag_usage_stats.used_tokens} 不再恒为 0、报表可用。
+     */
+    private static final class TokenCounter {
+        private final AtomicInteger provider = new AtomicInteger();
+        private final AtomicInteger promptEstimate = new AtomicInteger();
+
+        void addProvider(int tokens) {
+            if (tokens > 0) {
+                provider.addAndGet(tokens);
+            }
+        }
+
+        void addPromptEstimate(int tokens) {
+            if (tokens > 0) {
+                promptEstimate.addAndGet(tokens);
+            }
+        }
+
+        /**
+         * 本环节最终计入的 token 数。
+         *
+         * @param answerText 已生成的正文（用于估算 completion 侧）
+         */
+        int resolve(String answerText) {
+            if (provider.get() > 0) {
+                return provider.get();
+            }
+            return promptEstimate.get() + LlmUsage.estimate(answerText);
+        }
+    }
+
+    /** 估算证据部分的 token 数（优先用完整正文，退回 snippet） */
+    private int estimateEvidence(List<CitationVO> citations, List<String> evidenceTexts) {
+        if (citations == null || citations.isEmpty()) {
+            return 0;
+        }
+        int total = 0;
+        for (int i = 0; i < citations.size(); i++) {
+            String body = null;
+            if (evidenceTexts != null && i < evidenceTexts.size()) {
+                body = evidenceTexts.get(i);
+            }
+            if (body == null || body.isBlank()) {
+                body = citations.get(i).getSnippet();
+            }
+            total += LlmUsage.estimate(body);
+        }
+        return total;
+    }
+
+    /**
+     * 从 ChatResponse 里取出正文文本。
+     *
+     * <p>usage-only 的 chunk（正文为空、只带 usage）会返回空串，由调用方过滤。
+     */
+    private String extractText(ChatResponse resp) {
+        if (resp == null || resp.getResult() == null || resp.getResult().getOutput() == null) {
+            return "";
+        }
+        String text = resp.getResult().getOutput().getText();
+        return text == null ? "" : text;
+    }
+
+    /**
+     * 累加 token 用量。
+     *
+     * <p>provider 返回 usage 就用真实值；没返回（部分兼容端点不返回）时
+     * 退化为本地估算，保证统计值不为 0、报表可用。
+     */
+    private void accumulateUsage(ChatResponse resp, TokenCounter counter) {
+        LlmUsage usage = LlmUsage.from(resp);
+        if (usage.totalTokens() > 0) {
+            counter.addProvider(usage.totalTokens());
+        }
+    }
+
+    // ============================================================
     // 模板直答（chitchat / unsafe / out_of_scope / 未命中）
     // ============================================================
 
@@ -402,7 +519,7 @@ public class RagChatServiceImpl implements RagChatService {
         RagStreamItem chunk = new RagStreamItem(
                 RagStreamItem.Kind.CHUNK, answer, null, null, null, null, null, null, sid);
         Long assistantMsgId = persistAssistant(session, answer, List.of(), traceId, cost, caller, intent,
-                degraded.get());
+                degraded.get(), usedTokens);
         RagStreamItem message = new RagStreamItem(
                 RagStreamItem.Kind.MESSAGE, null, List.of(), assistantMsgId, usedTokens.get(), cost, null, null, sid);
         RagStreamItem done = new RagStreamItem(
@@ -425,7 +542,7 @@ public class RagChatServiceImpl implements RagChatService {
 
     private Long persistAssistant(RagSession session, String answer, List<CitationVO> citations,
                                   String traceId, int costMs, CallerInfo caller, Intent intent,
-                                  boolean degraded) {
+                                  boolean degraded, AtomicInteger usedTokens) {
         // 流式后置脱敏（第③道墙）：手机号 + 身份证
         String safe = sensitiveUtils.maskInText(answer);
 
@@ -443,7 +560,10 @@ public class RagChatServiceImpl implements RagChatService {
         // R6 · 摘要压缩：早期对话超出窗口时压进 session.summary
         // 失败只记日志（SessionSummarizer 内部已兜底），不影响本次回答。
         try {
-            sessionSummarizer.maybeSummarize(session);
+            LlmUsage summaryUsage = sessionSummarizer.maybeSummarize(session);
+            if (summaryUsage != null) {
+                usedTokens.addAndGet(summaryUsage.totalTokens());
+            }
         } catch (Exception e) {
             log.warn("[RAG][SUMMARY] 触发摘要压缩异常: {}", e.getMessage());
         }
@@ -453,7 +573,8 @@ public class RagChatServiceImpl implements RagChatService {
         stats.setUserId(caller.userId());
         stats.setRoleCode(caller.roleCode() == null ? "UNKNOWN" : caller.roleCode());
         stats.setIntent(intent == null ? "DOCS" : intent.dominant().name());
-        stats.setUsedTokens(0); // R3 未接真实 token 计费，先记 0
+        // 真实 token 用量（R6）：重写器 + 意图分类 + 答案合成 + 摘要压缩 之和
+        stats.setUsedTokens(usedTokens == null ? 0 : usedTokens.get());
         stats.setDocHits(citations == null ? 0 : citations.size());
         stats.setToolCalls(0); // v3 reserved
         stats.setCostMs(costMs);
