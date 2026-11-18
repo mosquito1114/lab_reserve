@@ -49,4 +49,19 @@ public interface RagSessionMapper extends BaseMapper<RagSession> {
     /** 累加最近窗口 token（R5 摘要压缩阈值统计用；R3 只累加） */
     @Update("UPDATE tb_rag_session SET last_token_window = #{tokens}, updated_at = NOW() WHERE id = #{sessionId}")
     int updateTokenWindow(@Param("sessionId") Long sessionId, @Param("tokens") int tokens);
+
+    /**
+     * 写入会话摘要（R6 · 激活此前一直没人写的 summary 字段）。
+     *
+     * <p>{@code summary_upto} 标记摘要覆盖到的最大 message_id，
+     * {@code ContextLoaderService} 据此跳过已进摘要的消息，避免重复占 token。
+     *
+     * <p>用显式 SQL 而不是 updateById：后者会跳过 null 字段，
+     * 且这里只想动 summary 两列，不希望带上其它字段。
+     */
+    @Update("UPDATE tb_rag_session SET summary = #{summary}, summary_upto = #{summaryUpTo}, "
+            + "updated_at = NOW() WHERE id = #{sessionId}")
+    int updateSummary(@Param("sessionId") Long sessionId,
+                      @Param("summary") String summary,
+                      @Param("summaryUpTo") Long summaryUpTo);
 }

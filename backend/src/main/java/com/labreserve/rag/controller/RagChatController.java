@@ -118,7 +118,7 @@ public class RagChatController {
                         log.warn("[RAG][SSE] 流中断: {}", rootMessage(err));
                         outputStream.write(frame(new RagStreamItem(
                                 RagStreamItem.Kind.ERROR, null, null, null,
-                                null, null, null, rootMessage(err))));
+                                null, null, null, rootMessage(err), null)));
                         outputStream.flush();
                         break;
                     }

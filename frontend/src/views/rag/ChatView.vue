@@ -647,6 +647,11 @@ async function send(): Promise<void> {
 
 /** 处理单个 SSE 事件 */
 function handleEvent(evt: RagStreamItem, aiMsg: UiMessage): void {
+  // 会话 ID 由后端随每个事件下发，直接回填（不再靠"刷新列表后取 list[0]"去猜）
+  if (evt.sessionId && evt.sessionId !== currentSessionId.value) {
+    currentSessionId.value = evt.sessionId
+  }
+
   switch (evt.kind) {
     case 'CHUNK':
       // 进队列，由打字机泵匀速吐出（不直接写 content）
@@ -681,12 +686,13 @@ function handleEvent(evt: RagStreamItem, aiMsg: UiMessage): void {
 /** 发送后刷新会话列表（新会话需要拿到 id 才能继续追问） */
 async function refreshAfterSend(): Promise<void> {
   try {
-    const before = sessions.value.length
     const list = await listSessions()
     sessions.value = list
-    if (!currentSessionId.value && list.length > before) {
-      // 新建了会话：取最近活跃的那条（后端 bumpMessage 后 last_message_at 最大）
-      currentSessionId.value = list[0]?.id ?? null
+    // currentSessionId 由 SSE 事件里的 sessionId 直接回填（handleEvent），
+    // 这里不再用 "list[0]?.id" 去猜 —— 快速连发或并发时会取错会话。
+    // 兜底：确实还没拿到 id 时，从列表里找当前正在活跃的那条。
+    if (!currentSessionId.value && list.length > 0) {
+      currentSessionId.value = list[0].id
     }
   } catch {
     /* ignore */

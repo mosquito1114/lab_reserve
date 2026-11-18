@@ -72,4 +72,16 @@ public class RagStreamItem implements Serializable {
 
     @Schema(description = "错误信息（仅 ERROR）")
     private String error;
+
+    /**
+     * 会话 ID（所有事件都带）。
+     *
+     * <p>R6 新增：前端原先只能靠"刷新会话列表后取第一条"来猜新会话的 id，
+     * 快速连发或并发时容易取错。这里直接把 id 推给前端，从根上避免猜。
+     *
+     * <p><b>字段刻意放在最后</b>：{@code @AllArgsConstructor} 生成的构造器参数按字段声明顺序，
+     * 放在末尾可以让历史调用点（8 个参数）的语义保持不变，新代码用 9 参数版本即可。
+     */
+    @Schema(description = "会话 ID（所有事件都带）")
+    private Long sessionId;
 }

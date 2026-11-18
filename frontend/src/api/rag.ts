@@ -53,6 +53,8 @@ export interface RagStreamItem {
   costMs?: number
   reason?: string
   error?: string
+  /** 会话 ID（所有事件都带）——用于可靠回填当前会话，避免"刷新列表后猜 list[0]" */
+  sessionId?: number
 }
 
 /** 会话列表项 */

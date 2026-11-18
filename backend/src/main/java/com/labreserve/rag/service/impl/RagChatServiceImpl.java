@@ -17,11 +17,13 @@ import com.labreserve.rag.model.vo.Intent;
 import com.labreserve.rag.model.vo.RagStreamItem;
 import com.labreserve.rag.service.AnswerSynthesizer;
 import com.labreserve.rag.service.ContextLoaderService;
+import com.labreserve.rag.service.ContextRecallDetector;
 import com.labreserve.rag.service.FairQueueService;
 import com.labreserve.rag.service.IntentRouter;
 import com.labreserve.rag.service.KbRetriever;
 import com.labreserve.rag.service.QueryRewriter;
 import com.labreserve.rag.service.RagChatService;
+import com.labreserve.rag.service.SessionSummarizer;
 import com.labreserve.rag.util.TraceIdUtil;
 import com.labreserve.util.SecurityUtils;
 import com.labreserve.util.SensitiveUtils;
@@ -85,6 +87,14 @@ public class RagChatServiceImpl implements RagChatService {
     @Autowired
     private AnswerSynthesizer synthesizer;
 
+    /** R6 · 会话摘要压缩（激活 tb_rag_session.summary） */
+    @Autowired
+    private SessionSummarizer sessionSummarizer;
+
+    /** R6 · 上下文自省检测（"我一开始问的是什么"这类问法） */
+    @Autowired
+    private ContextRecallDetector recallDetector;
+
     /** Step 0 */
     @Autowired
     private FairQueueService fairQueue;
@@ -140,7 +150,9 @@ public class RagChatServiceImpl implements RagChatService {
             var rewritten = rewriter.rewrite(dto.getMessage(), context.lastTurnDigest());
 
             // ============ Step 3 意图 ============
-            Intent intent = intentRouter.route(rewritten.question());
+            // 带上历史里用户的问句：纯指代问句（「那它呢」）单看信号弱，
+            // 结合上一轮才知道延续的是什么话题（R6）。
+            Intent intent = resolveIntent(rewritten.question(), dto.getMessage(), context);
 
             // ---------- 落 USER 消息 ----------
             RagMessage userMsg = new RagMessage();
@@ -182,7 +194,7 @@ public class RagChatServiceImpl implements RagChatService {
                         intent);
 
                 case DOCS -> retrievalBranch(session, userMsg, traceId, startMs, caller,
-                        intent, rewritten.question(), usedTokens, degraded);
+                        intent, rewritten.question(), dto.getMessage(), context, usedTokens, degraded);
             };
         }).doFinally(signal -> {
             MDC.remove("traceId");
@@ -196,10 +208,106 @@ public class RagChatServiceImpl implements RagChatService {
     // docs 分支：检索 → 合成 → 引用
     // ============================================================
 
+    /**
+     * 意图判定（R6 · 三级优先级）。
+     *
+     * <ol>
+     *   <li><b>unsafe</b>：命中注入关键词 → 直接拒（最高优先级，不可被任何分支抢走）</li>
+     *   <li><b>上下文自省</b>：「我一开始问的是什么」「总结一下我们前面讨论的」
+     *       → 路由到 DOCS 分支，由分支内部再分流到纯历史作答
+     *       （<b>必须在意图分类之前判</b>：这类问法单看像闲聊，
+     *        走 LLM 分类会被判成 chitchat，回一句"你好我是助手"，完全答非所问）</li>
+     *   <li><b>常规意图分类</b>：快路径 + LLM 兜底</li>
+     * </ol>
+     *
+     * @param rewrittenQuestion 重写后的问句
+     * @param rawInput          用户原始输入（recall 检测用原始问法更准）
+     * @param context           会话上下文
+     */
+    private Intent resolveIntent(String rewrittenQuestion, String rawInput,
+                                 ContextLoaderService.LoadedContext context) {
+        // ① unsafe 优先
+        if (intentRouter.isUnsafe(rewrittenQuestion) || intentRouter.isUnsafe(rawInput)) {
+            return Intent.unsafe();
+        }
+        // ② 上下文自省：原始问法或重写问句任一命中即可
+        String historyText = context == null ? "" : context.historyText();
+        if (!historyText.isBlank()
+                && (recallDetector.isRecall(rawInput) || recallDetector.isRecall(rewrittenQuestion))) {
+            return Intent.docs();
+        }
+        // ③ 常规意图分类（带历史，供 LLM 判定语境）
+        return intentRouter.route(rewrittenQuestion, context == null ? "" : context.userQuestionDigest());
+    }
+
+    /**
+     * R6 · 上下文自省分支：只依据对话历史作答，不检索知识库、不产引用角标。
+     */
+    private Flux<RagStreamItem> recallBranch(RagSession session, RagMessage userMsg, String traceId,
+                                             long startMs, CallerInfo caller, Intent intent,
+                                             String question, String historyText,
+                                             AtomicInteger usedTokens, AtomicBoolean degraded) {
+        Flux<String> textFlux;
+        try {
+            textFlux = synthesizer.recallFromHistory(question, historyText)
+                    .timeout(java.time.Duration.ofSeconds(60));
+        } catch (Exception e) {
+            log.warn("[RAG][CHAT] 上下文作答建立失败,降级: {}", e.getMessage());
+            degraded.set(true);
+            return templateAnswer(session, userMsg, traceId, startMs, usedTokens, degraded, caller,
+                    "抱歉，我暂时无法回顾这次对话。", intent);
+        }
+
+        StringBuilder buffer = new StringBuilder();
+        AtomicBoolean persisted = new AtomicBoolean(false);
+        final Long sid = session.getId();
+
+        Flux<String> safeFlux = streamingSanitizer.sanitize(textFlux);
+
+        Flux<RagStreamItem> body = safeFlux.map(chunk -> {
+            buffer.append(chunk);
+            return new RagStreamItem(RagStreamItem.Kind.CHUNK, chunk, null, null, null, null, null, null, sid);
+        });
+
+        Flux<RagStreamItem> tail = Flux.defer(() -> {
+            if (!persisted.compareAndSet(false, true)) {
+                return Flux.empty();
+            }
+            String answer = buffer.toString();
+            int cost = (int) (System.currentTimeMillis() - startMs);
+            // 无检索 → 无引用
+            Long assistantMsgId = persistAssistant(session, answer, List.of(), traceId, cost, caller, intent,
+                    degraded.get());
+
+            RagStreamItem citationItem = new RagStreamItem(
+                    RagStreamItem.Kind.CITATION, null, List.of(), null, null, null, null, null, sid);
+            RagStreamItem messageItem = new RagStreamItem(
+                    RagStreamItem.Kind.MESSAGE, null, List.of(), assistantMsgId, usedTokens.get(), cost, null, null, sid);
+            RagStreamItem doneItem = new RagStreamItem(
+                    RagStreamItem.Kind.DONE, null, null, assistantMsgId, usedTokens.get(), cost, null, null, sid);
+            return Flux.just(citationItem, messageItem, doneItem);
+        });
+
+        return body.concatWith(tail);
+    }
+
     private Flux<RagStreamItem> retrievalBranch(RagSession session, RagMessage userMsg, String traceId,
                                                long startMs, CallerInfo caller, Intent intent,
                                                String rewrittenQuestion,
+                                               String rawInput,
+                                               ContextLoaderService.LoadedContext context,
                                                AtomicInteger usedTokens, AtomicBoolean degraded) {
+        // ---- R6 · 上下文自省分支 ----
+        // 「我一开始问的是什么」「总结一下我们前面讨论的」这类问法，
+        // 答案完全来自对话历史，不需要检索知识库（检索必然不命中 → 被硬拒）。
+        String historyText = context == null ? "" : context.historyText();
+        if (!historyText.isBlank()
+                && (recallDetector.isRecall(rawInput) || recallDetector.isRecall(rewrittenQuestion))) {
+            log.info("[RAG][CHAT] 命中上下文自省,走历史作答: sessionId={}", session.getId());
+            return recallBranch(session, userMsg, traceId, startMs, caller, intent,
+                    rewrittenQuestion, historyText, usedTokens, degraded);
+        }
+
         // ---- Step 4 检索 ----
         KbRetriever.RetrievalResult retrieval;
         try {
@@ -231,7 +339,7 @@ public class RagChatServiceImpl implements RagChatService {
         // ---- Step 5 流式合成 ----
         Flux<String> textFlux;
         try {
-            textFlux = synthesizer.stream(rewrittenQuestion, citations, evidenceTexts)
+            textFlux = synthesizer.stream(rewrittenQuestion, citations, evidenceTexts, historyText)
                     .timeout(java.time.Duration.ofSeconds(60));
         } catch (Exception e) {
             log.warn("[RAG][CHAT] 合成建立失败,降级: {}", e.getMessage());
@@ -250,9 +358,10 @@ public class RagChatServiceImpl implements RagChatService {
         Flux<String> safeFlux = streamingSanitizer.sanitize(textFlux);
 
         // 正文 chunk 透传 + 累积
+        final Long sid = session.getId();
         Flux<RagStreamItem> body = safeFlux.map(chunk -> {
             buffer.append(chunk);
-            return new RagStreamItem(RagStreamItem.Kind.CHUNK, chunk, null, null, null, null, null, null);
+            return new RagStreamItem(RagStreamItem.Kind.CHUNK, chunk, null, null, null, null, null, null, sid);
         });
 
         // 流结束后发 citation + message + done（只执行一次）
@@ -266,11 +375,11 @@ public class RagChatServiceImpl implements RagChatService {
                     degraded.get());
 
             RagStreamItem citationItem = new RagStreamItem(
-                    RagStreamItem.Kind.CITATION, null, citations, null, null, null, null, null);
+                    RagStreamItem.Kind.CITATION, null, citations, null, null, null, null, null, sid);
             RagStreamItem messageItem = new RagStreamItem(
-                    RagStreamItem.Kind.MESSAGE, null, citations, assistantMsgId, usedTokens.get(), cost, null, null);
+                    RagStreamItem.Kind.MESSAGE, null, citations, assistantMsgId, usedTokens.get(), cost, null, null, sid);
             RagStreamItem doneItem = new RagStreamItem(
-                    RagStreamItem.Kind.DONE, null, null, assistantMsgId, usedTokens.get(), cost, null, null);
+                    RagStreamItem.Kind.DONE, null, null, assistantMsgId, usedTokens.get(), cost, null, null, sid);
 
             return Flux.just(citationItem, messageItem, doneItem);
         });
@@ -289,20 +398,22 @@ public class RagChatServiceImpl implements RagChatService {
                                               String answer, Intent intent) {
         int cost = (int) (System.currentTimeMillis() - startMs);
         // 模板答案当作"一次性正文"发（前端仍走 chunk 渲染，保持 UI 一致）
+        final Long sid = session.getId();
         RagStreamItem chunk = new RagStreamItem(
-                RagStreamItem.Kind.CHUNK, answer, null, null, null, null, null, null);
+                RagStreamItem.Kind.CHUNK, answer, null, null, null, null, null, null, sid);
         Long assistantMsgId = persistAssistant(session, answer, List.of(), traceId, cost, caller, intent,
                 degraded.get());
         RagStreamItem message = new RagStreamItem(
-                RagStreamItem.Kind.MESSAGE, null, List.of(), assistantMsgId, usedTokens.get(), cost, null, null);
+                RagStreamItem.Kind.MESSAGE, null, List.of(), assistantMsgId, usedTokens.get(), cost, null, null, sid);
         RagStreamItem done = new RagStreamItem(
-                RagStreamItem.Kind.DONE, null, null, assistantMsgId, usedTokens.get(), cost, null, null);
+                RagStreamItem.Kind.DONE, null, null, assistantMsgId, usedTokens.get(), cost, null, null, sid);
 
         Flux<RagStreamItem> base = Flux.just(chunk, message, done);
 
         if (degraded.get()) {
             RagStreamItem dg = new RagStreamItem(
-                    RagStreamItem.Kind.DEGRADED, null, null, null, null, null, "服务繁忙，已返回兜底答案", null);
+                    RagStreamItem.Kind.DEGRADED, null, null, null, null, null, "服务繁忙，已返回兜底答案", null,
+                    session.getId());
             base = Flux.concat(Flux.just(dg), base);
         }
         return base;
@@ -328,6 +439,14 @@ public class RagChatServiceImpl implements RagChatService {
         msg.setCreatedAt(LocalDateTime.now());
         messageMapper.insert(msg);
         sessionMapper.bumpMessage(session.getId());
+
+        // R6 · 摘要压缩：早期对话超出窗口时压进 session.summary
+        // 失败只记日志（SessionSummarizer 内部已兜底），不影响本次回答。
+        try {
+            sessionSummarizer.maybeSummarize(session);
+        } catch (Exception e) {
+            log.warn("[RAG][SUMMARY] 触发摘要压缩异常: {}", e.getMessage());
+        }
 
         // usage 统计
         RagUsageStats stats = new RagUsageStats();

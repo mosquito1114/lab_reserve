@@ -107,6 +107,15 @@ public class RagProperties {
         private int historyWindow = 6;
 
         /**
+         * 触发会话摘要压缩的阈值（R6）。
+         *
+         * <p>指「落在最近 {@link #historyWindow} 轮之外、且尚未进摘要」的早期消息条数。
+         * 达到这个数才值得花一次 LLM 调用把早期对话压成摘要，
+         * 否则早期对话直接丢失，用户追问早期话题时 LLM 会答不上来。
+         */
+        private int summaryTriggerMessages = 4;
+
+        /**
          * KB 检索返回的切片条数（topK）。
          * <p>与 {@link #historyWindow} 无关（曾经误用过 historyWindow 当 topK，已修正）。
          * 值太大 → prompt 变长、引噪声；太小 → 漏召回。5 是 R4 评估集实测较好的值。
