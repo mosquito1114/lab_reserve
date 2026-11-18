@@ -43,7 +43,11 @@ public class IntentRouter {
 
     // —— unsafe：prompt injection / 越权 ——
     private static final Pattern UNSAFE = Pattern.compile(
-            "忽略(之前|上面|前面|所有)?的?(指令|命令|规则|提示)"
+            // 时间词 / 连接词可任意次序连用，数量有限：
+            //   "忽略之前的指令" "忽略上面所有指令" "忽略之前的所有指令" "忽略所有指令"
+            // 上限 4 个连接词：再长就不是注入句式了
+            //（"忽略我的预约审核状态里的规则"这类正常句不会误伤 —— 中间超过 4 字就不匹配）
+            "忽略(之前|上面|前面|所有|一切|的|都){0,4}(指令|命令|规则|提示|要求|设定)"
                     + "|ignore\\s+(all\\s+)?(previous|above|prior)\\s+(instruction|prompt|rule)"
                     + "|你的(系统)?(提示词|prompt|设定)"
                     + "|system\\s*prompt"
@@ -60,7 +64,7 @@ public class IntentRouter {
                     + "|帮我(预约|取消|删除|修改|提交|审批|派单|改)"
                     + "|怎么(预约|取消预约|申请|报修|排队)"
                     + "|如何(预约|取消预约|申请|报修|排队)"
-                    + "(取消|撤销|释放)(预约|申请)"
+                    + "|(取消|撤销|释放)(预约|申请)"
                     + "|我的(课表|实验课表|成绩)"
                     + "|审核(状态|结果)|审批(状态|结果)"
                     , Pattern.CASE_INSENSITIVE);
