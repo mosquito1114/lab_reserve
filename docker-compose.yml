@@ -134,7 +134,13 @@ services:
     volumes:
       - qdrant-data:/qdrant/storage
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:6333/healthz 2>/dev/null | grep -q ok || exit 1"]
+      # 注意：qdrant/qdrant 镜像里**没有 wget / curl**（只有 bash），
+      # 早先的 `wget ... /healthz` 探测永远失败 → 容器一直显示 unhealthy
+      # （但服务其实是好的）。改用 bash 内建的 /dev/tcp 发一个真实 HTTP 请求。
+      #  2) **必须用 CMD 数组显式调用 bash**，不能用 CMD-SHELL ——
+      #     CMD-SHELL 走 /bin/sh，而 qdrant 镜像的 /bin/sh 是 dash，
+      #     dash 不支持 /dev/tcp（bash 专有特性）→ 探测仍会失败。
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333 && printf 'GET /healthz HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && timeout 5 grep -q '200 OK' <&3"]
       interval: 15s
       timeout: 5s
       retries: 10
