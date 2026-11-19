@@ -103,6 +103,12 @@ class IntentRouterFastPathTest {
             "候补确认时限多久",
             "预约最多提前几天",
             "违规会怎么处理",
+            // 「为什么」开头必定在问原因，不该被当成闲聊
+            // （R6 踩过：DOCS 正则里「为什么」必须紧跟固定动词，
+            //  "为什么所有问题都能检索到东西" 落到 LLM 后被判成 chitchat）
+            "为什么所有问题都能检索到东西",
+            "为什么检索结果里混进了不相关内容",
+            "为什么报修后没有收到通知",
     })
     @DisplayName("知识库 / 规则类问题 → docs")
     void shouldDetectDocs(String q) {
